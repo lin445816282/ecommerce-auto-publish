@@ -1,0 +1,215 @@
+全平台AI自动上架系统｜细化任务（接续上面）
+下面把：数据库表字段、接口清单、MVP最小可运行代码片段、适配器模板、调度任务、异常处理、测试用例、目录工程结构全部细化，拿到就可以直接开工。
+一、工程目录结构（后端 Python FastAPI）
+plaintext
+ecommerce_auto_publish/
+├── main.py                     # 程序入口
+├── config/
+│   ├── settings.py             # 全局配置、API‑key、平台密钥、限流参数
+│   └── platform_adapter.yaml   # 各平台映射配置：类目、属性、图片规则
+├── db/
+│   ├── models.py               # ORM数据表模型
+│   └── session.py              # mysql、redis连接
+├── modules/
+│   ├── product_source/         # 第一层：产品源
+│   ├── product_master/         # 第二层：一张主表
+│   ├── scheduler_core/         # 第三层：调度核心、任务队列、合规闸
+│   ├── adapter_layer/          # 第四+五层：划清边界 + 平台难点（各平台适配器）
+│   │   ├── base_adapter.py     # 适配器基类
+│   │   ├── taobao_adapter.py
+│   │   ├── douyin_adapter.py
+│   │   ├── pdd_adapter.py
+│   │   └── amazon_adapter.py
+│   ├── export_gate/            # 第六层：出口、草稿、审核、发布权限
+│   └── ai_brain/               # AI决策层：审核、标题生成、图片处理
+├── tasks/                      # celery异步任务：抓取、图片处理、上传
+├── utils/
+│   ├── text_filter.py          # 文字违规词库
+│   ├── image_check.py          # 图片水印、侵权简易检测
+│   ├── retry_utils.py          # 重试、熔断工具
+│   └── common.py
+├── static/                     # 临时图片缓存
+├── tests/                      # 单元测试、集成测试用例
+└── logs/                       # 运行日志
+二、数据库核心表设计（关键字段）
+1）商品主表 product_master
+字段 类型 说明 
+id bigint 主键，全局商品ID（全链路主键） 
+inner_sku varchar 内部SKU编号 
+title varchar 通用标题 
+desc text 通用详情 
+price decimal 售价 
+cost_price decimal 成本价 
+stock int 库存 
+main_images json 主图数组 
+detail_images json 详情图数组 
+spec_json json 规格数据 
+attrs_json json 通用属性集合 
+source_type varchar 来源：1688/manual/other 
+source_url varchar 原始来源链接 
+version int 数据版本号，用于回滚 
+status tinyint 0草稿 1待审核 2已生成平台草稿 3部分上架 4全部上架 5作废 
+create_time datetime 创建时间 
+update_time datetime 更新时间 
+2）平台商品映射表 product_platform_rel
+一个主商品，对应多个平台的商品草稿/正式商品
+|字段|类型|说明|
+|---|---|---|
+|id|bigint|主键|
+|master_id|bigint|关联product_master.id|
+|platform|varchar|taobao / douyin / pdd / amazon|
+|shop_id|varchar|店铺ID|
+|platform_item_id|varchar|平台返回商品ID，草稿时可为null|
+|platform_draft_data|json|该平台适配后的完整报文|
+|platform_status|varchar|draft / pending_audit / published / fail|
+|error_msg|text|最近一次上传错误信息|
+|create_time|datetime||
+|update_time|datetime||
+3）任务调度表 task_job
+字段 类型 说明 
+id bigint 任务ID 
+job_type varchar crawl / image_process / adapt / publish 
+master_id bigint null代表批量任务 
+platform varchar 目标平台 
+job_status tinyint 0待执行 1执行中 2成功 3失败 
+retry_count int 已重试次数 
+max_retry int 最大重试次数 
+payload json 任务参数 
+result json 任务返回结果 
+create_time datetime  
+next_run_time datetime 断链续跑：下次执行时间 
+4）审核记录表 audit_record
+字段 类型 说明 
+id bigint  
+master_id bigint  
+platform varchar  
+audit_type varchar auto_ai / manual 
+audit_result tinyint 0待审核 1通过 2拒绝 
+audit_comment text 拒绝原因 
+operator varchar 操作人 
+create_time datetime  
+5）平台配置表 platform_config
+存储类目映射、属性映射、店铺授权信息
+字段 类型 说明 
+platform varchar  
+shop_id varchar  
+config_key varchar category_map / attr_map / api_auth 
+config_value json 映射json 
+update_time datetime  
+三、核心API接口清单（RESTful）
+产品源模块
+1.  POST /api/product/crawl  传入1688链接，抓取商品，生成主表记录
+2.  POST /api/product/manual/create  手动录入商品
+3.  GET /api/product/master/list  商品主列表
+4.  GET /api/product/master/{id}  获取单条主商品详情
+5.  PUT /api/product/master/{id}  修改主商品，自动升级version版本
+调度核心模块
+6.  POST /api/task/create  创建任务（抓取/图片处理/适配/上传）
+7.  GET /api/task/list  任务列表，查看执行状态
+8.  POST /api/task/retry/{task_id}  失败任务手动重试
+9.  POST /api/task/cancel/{task_id}  取消任务
+平台适配器层
+10.  POST /api/adapt/generate_draft  输入master_id+platform，执行字段适配，生成平台草稿，写入product_platform_rel
+11.  GET /api/adapt/platform_draft/{rel_id}  查询适配后的草稿报文，给前端预览
+出口（审核发布）
+12.  GET /api/audit/pending/list  获取待审核草稿列表
+13.  POST /api/audit/submit  审核通过/驳回，写入audit_record
+14.  POST /api/publish/execute/{rel_id}  发布门接口：必须校验权限，审核通过才允许调用，正式提交平台
+15.  GET /api/publish/result/{rel_id}  获取发布结果
+AI大脑模块
+16.  POST /api/ai/check_text  文本违规检测
+17.  POST /api/ai/gen_title  AI生成标题
+18.  POST /api/ai/image_process  图片抠图、尺寸裁剪、水印检测
+四、适配器基类（base_adapter.py 伪代码，可直接转真实代码）
+python
+from abc import ABC, abstractmethod
+class BasePlatformAdapter(ABC):
+    def __init__(self, shop_cfg):
+        self.shop_cfg = shop_cfg # 店铺授权、类目映射配置
+    @abstractmethod
+    def read_master_product(self, master_data):
+        &quot;&quot;&quot;读取商品主表数据&quot;&quot;&quot;
+        pass
+    @abstractmethod
+    def translate_fields(self, master_data):
+        &quot;&quot;&quot;字段翻译：主表字段 → 平台请求字段&quot;&quot;&quot;
+        pass
+    @abstractmethod
+    def check_required(self, platform_payload):
+        &quot;&quot;&quot;校验平台必填项，缺失返回错误&quot;&quot;&quot;
+        pass
+    @abstractmethod
+    def upload_images(self, image_list):
+        &quot;&quot;&quot;上传图片到平台素材库，返回平台图片ID数组&quot;&quot;&quot;
+        pass
+    @abstractmethod
+    def submit_draft(self, payload):
+        &quot;&quot;&quot;提交生成草稿，返回平台草稿id&quot;&quot;&quot;
+        pass
+    @abstractmethod
+    def publish_draft(self, draft_id):
+        &quot;&quot;&quot;草稿正式上架&quot;&quot;&quot;
+        pass
+每个平台适配器继承这个基类，只重写内部逻辑；调度层统一调用基类方法，实现“共用动作序列，平台值分开”。
+五、调度核心任务拆分（celery任务）
+1. crawl_task
+- 输入：source_url
+- 输出：product_master一条记录
+- 内置：文字闸初步过滤，遇到违禁直接标记作废，不再往下流转
+2. image_process_task
+- 输入：master_id
+- 逻辑：下载原图 → 水印检测 → AI处理图片 → 本地缓存
+- 失败：记录错误，任务状态置失败，可重试
+3. adapt_task
+- 输入：master_id + platform
+- 逻辑：加载对应适配器 → read_master → translate_fields → check_required → upload_images → submit_draft
+- 输出：写入product_platform_rel，状态=draft
+4. publish_task
+- 输入：rel_id
+- 前置校验：查询audit_record必须有审核通过记录；校验发布权限；否则直接拒绝执行
+- 调用adapter.publish_draft()
+- 更新platform_status、error_msg
+断链续跑逻辑：任务表记录 next_run_time ，程序启动扫描：status=0/1 并且 next_run_time &lt;=now 的任务继续执行。
+六、合规“三道闸”逻辑
+1. 文字闸 text_filter
+- 词库文件： ban_word.txt ，每行一个违禁词
+- 扫描：title、desc、attrs
+- 命中 → master.status=5作废，写入日志，不再向下派发任务
+2. 图片闸 image_check
+- 水印检测、简单logo特征匹配
+- 发现严重水印/侵权标记 → 任务终止，标记待人工处理
+3. 业务校验闸
+- price &lt; cost_price * 0.3 价格异常拦截，禁止自动发布，进入人工审核队列
+七、异常、重试、熔断规则
+1. 网络超时、平台限流：指数退避重试，最大重试3次
+2. 返回业务错误（类目不存在、属性非法）：不可重试，直接标记失败，等待人工修改主商品
+3. 某平台连续10个任务失败 → 触发熔断，暂停该平台全部新任务；后台告警，人工恢复
+4. 任何步骤失败，不修改原始product_master数据，错误写在product_platform_rel.error_msg，保证主表安全。
+八、MVP阶段测试用例（节选）
+用例1：抓取1688商品完整链路
+1. 输入合法1688url调用 /api/product/crawl 
+2. 断言：product_master生成一条记录，source_url正确
+3. 自动生成crawl_task，任务状态成功
+4. 手动触发adapt_task，目标平台taobao
+5. 断言product_platform_rel生成记录，platform_status=draft
+6. 前端预览适配后的草稿报文
+7. 执行审核通过，调用publish_execute
+8. 断言调用淘宝提交接口，状态更新published
+用例2：违禁词拦截
+1. 商品标题包含违禁词，执行crawl
+2. 断言master.status=5作废，不会生成后续adapt任务
+用例3：发布门权限拦截
+1. 草稿未审核，直接调用publish/execute
+2. 返回403拒绝，不会调用平台发布接口
+九、风险点内置处理（写进代码逻辑）
+1. 平台API变更：适配器和业务主逻辑隔离，只修改对应adapter，不改动调度、主表
+2. 多店铺：platform_config按shop_id隔离配置，不同店铺密钥互不干扰
+3. 防止重复上架：抓取时对比source_url历史记录；适配时对比平台item_id
+4. 数据安全：平台access_key、secret全部加密存储，不明文返回接口
+十、下一阶段可以继续细化的内容（你可以选一个我继续展开）
+1. 前端页面页面清单+接口对接（React管理后台页面）
+2. 1688抓取模块完整可运行Python代码
+3. 淘宝适配器完整示例代码
+4. celery任务队列部署配置
+5. 整套postman接口测试集合
+6. 部署docker-compose.yml
