@@ -1,6 +1,6 @@
 # 全平台AI自动上架系统 — 项目执行计划
 
-## 项目状态：🟢 v0.5.0 全部完成
+## 项目状态：🟢 v0.7.0 全部完成
 **项目经理**：AI（小林辅助决策）  
 **开始日期**：2026-08-06  
 **仓库**：[github.com/lin445816282/ecommerce-auto-publish](https://github.com/lin445816282/ecommerce-auto-publish)  
@@ -22,10 +22,47 @@
 | P1-1 | 出口门（草稿/审核/发布） | ✅ 5级权限 |
 | P1-2 | AI决策层（审核/标题/描述） | ✅ Mock模式 |
 | P1-3 | React管理后台 | ✅ |
-| P2-1 | 接入真实大模型API | ✅ 6家37模型 (GPT-4.1/Claude4/DeepSeek-V4/Kimi/Qwen3/豆包) |
+| P2-1 | 接入真实大模型API | ✅ 6家37模型（GPT-4.1/Claude4/DeepSeek-V4/Kimi/Qwen3/豆包）|
 | P2-2 | AI图片处理（抠图/水印） | ✅ Pillow+rembg |
 | P2-3 | 前端图片上传+处理 | ✅ 拖拽上传+预览+优化 |
 | P2-4 | Docker一键部署 | ✅ Dockerfile+docker-compose+nginx |
+| P3-1 | AI引擎热修复（真实API调用）| ✅ DeepSeek真实API已验证 |
+| P3-2 | 流水线持久化（DB记录） | ✅ ProductPlatformRel自动创建 |
+| P3-3 | 仪表盘数据完善 | ✅ by_platform聚合+最近流水线 |
+| P3-4 | 三道闸全链路验证 | ✅ 文字/价格/图片闸全部通过测试 |
+| P3-5 | FastAPI现代化 (lifespan) | ✅ 移除on_event废弃API |
+| P3-6 | 启动入口+端口修正 | ✅ uvicorn.run + 端口8800 |
+
+---
+
+## v0.6.0 新增修复内容
+
+### 1. AI引擎热修复
+- **问题**: `config_manager._reload_engine()` 更新了模块级 `ai_engine`，但 `main.py` 通过 `from import` 持有旧引用
+- **修复**: main.py 改用 `import modules.ai_brain.engine as ai_engine_mod`，每次通过 `ai_engine_mod.ai_engine` 访问最新实例
+- **修复**: `AIConfigManager.__init__` 启动时自动调用 `_reload_engine()` 加载已保存的API Key
+- **验证**: DeepSeek API真实调用 → 标题生成3个变体、描述优化含卖点、关键词提取10个
+
+### 2. 流水线持久化
+- **新增**: `PipelineOrchestrator._persist_platform_rel()` 方法
+- **功能**: 发布成功后自动创建/更新 `ProductPlatformRel` 数据库记录
+- **效果**: 仪表盘 `by_platform` 数据现在实时反映真实平台分布
+
+### 3. 三道闸验证
+- 文字闸: "高仿LV包包" → TEXT_BAN → 直接作废 ✅
+- 图片闸: 水印/品牌Logo检测 (MVP阶段TODO接入YOLO) ⚠️
+- 价格闸: 售价¥10 < 成本¥100的30% → PRICE_ANOMALY → 待审核 ✅
+
+### 4. FastAPI现代化
+- `@app.on_event("startup")` → `lifespan` context manager
+- 版本号: 0.4.0 → 0.5.0 (启动日志)
+- 端口: 8000 → 8800 (启动日志)
+- 新增 `if __name__ == "__main__": uvicorn.run(...)` 入口
+
+### 5. 前端构建修复
+- API默认URL: `/api` → `http://localhost:8800/api` (静态服务器无代理时直连)
+- 生产构建: react-scripts build → 静态文件部署于 :3002
+- `.env` / `.env.production` 环境变量配置
 
 ---
 

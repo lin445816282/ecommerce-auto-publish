@@ -6,3 +6,7 @@ processed_images/
 *.log
 .env
 .DS_Store
+
+# Secrets & data
+ecommerce_auto_publish/data/
+ecommerce_auto_publish/modules/ai_brain/ai_config.json

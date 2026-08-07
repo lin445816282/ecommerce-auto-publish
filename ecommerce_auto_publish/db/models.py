@@ -91,4 +91,18 @@ class PlatformConfig(Base):
     config_value = Column(JSON, default=dict)
     update_time = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-print("[DB] Models defined: ProductMaster, ProductPlatformRel, TaskJob, AuditRecord, PlatformConfig")
+
+class User(Base):
+    """用户表 — JWT认证"""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(64), unique=True, nullable=False, index=True)
+    password_hash = Column(String(256), nullable=False)
+    full_name = Column(String(128), default="")
+    role = Column(String(16), default="operator", comment="admin/operator/viewer")
+    is_active = Column(SmallInteger, default=1)
+    last_login = Column(DateTime, nullable=True)
+    create_time = Column(DateTime, default=datetime.utcnow)
+
+print("[DB] Models defined: ProductMaster, ProductPlatformRel, TaskJob, AuditRecord, PlatformConfig, User")

@@ -1,12 +1,55 @@
 import axios from 'axios';
 
 // 开发环境直连后端，生产环境 (Docker/nginx) 走反向代理 /api
-const BASE = process.env.REACT_APP_API_URL || '/api';
+const BASE = process.env.REACT_APP_API_URL || 'http://localhost:8800/api';
 
 const api = axios.create({
   baseURL: BASE,
   timeout: 15000,
 });
+
+// ===== Auth Interceptor =====
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('access_token');
+  if (token) {
+    config.headers.Authorization = 'Bearer ' + token;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (refreshToken && !error.config._retry) {
+        error.config._retry = true;
+        try {
+          const res = await axios.post(BASE + '/auth/refresh', { refresh_token: refreshToken });
+          const newToken = res.data.data.access_token;
+          localStorage.setItem('access_token', newToken);
+          error.config.headers.Authorization = 'Bearer ' + newToken;
+          return api(error.config);
+        } catch {
+          // Refresh failed, clear auth
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('user');
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+// ===== Auth APIs =====
+export const login = (username, password) =>
+  api.post('/auth/login', { username, password });
+export const register = (username, password, fullName = '') =>
+  api.post('/auth/register', { username, password, full_name: fullName });
+export const getMe = () => api.get('/auth/me');
+export const refreshToken = (refresh_token) =>
+  api.post('/auth/refresh', { refresh_token });
 
 // 产品源
 export const crawlProduct = (url) => api.post('/product/crawl', { source_url: url });

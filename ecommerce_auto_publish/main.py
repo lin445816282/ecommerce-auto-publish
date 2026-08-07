@@ -1,4 +1,4 @@
-"""全平台AI自动上架系统 — FastAPI入口 v0.5.0"""
+"""全平台AI自动上架系统 — FastAPI入口 v0.7.0 (JWT Auth)"""
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -7,7 +7,7 @@ from datetime import datetime
 import base64
 
 from db.session import init_db, get_db
-from db.models import ProductMaster, ProductPlatformRel, TaskJob, AuditRecord
+from db.models import ProductMaster, ProductPlatformRel, TaskJob, AuditRecord, User
 from sqlalchemy.orm import Session
 
 from modules.product_source.crawler import product_importer
@@ -15,9 +15,13 @@ from modules.product_master.manager import product_manager as pm_mgr
 from modules.scheduler_core.task_dispatcher import dispatcher
 from modules.scheduler_core.orchestrator import orchestrator
 from modules.export_gate.publisher import publish_gate, PublishPermission
-from modules.ai_brain.engine import ai_engine
+import modules.ai_brain.engine as ai_engine_mod  # module ref for hot-reload
 from modules.ai_brain.config_manager import ai_config
 from modules.ai_brain.image_processor import image_processor as img_proc
+from modules.auth.jwt_handler import (
+    hash_password, verify_password, create_access_token, create_refresh_token,
+    decode_token, require_auth, optional_auth, bearer_scheme,
+)
 
 app = FastAPI(
     title="全平台AI自动上架系统",
@@ -33,6 +37,124 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ============ 认证模块 (JWT) ============
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+    full_name: str = ""
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+def get_current_user(
+    credentials=Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    """从JWT token获取当前登录用户"""
+    if credentials is None:
+        raise HTTPException(401, "未提供认证令牌")
+    payload = decode_token(credentials.credentials)
+    if payload is None:
+        raise HTTPException(401, "令牌无效或已过期")
+    if payload.get("type") != "access":
+        raise HTTPException(401, "请使用access token")
+    user = db.query(User).filter(User.id == int(payload["sub"])).first()
+    if not user or not user.is_active:
+        raise HTTPException(401, "用户不存在或已禁用")
+    return user
+
+
+@app.post("/api/auth/login", tags=["认证"])
+async def login(req: LoginRequest, db: Session = Depends(get_db)):
+    """用户登录，返回 access_token + refresh_token"""
+    user = db.query(User).filter(User.username == req.username).first()
+    if not user or not verify_password(req.password, user.password_hash):
+        raise HTTPException(401, "用户名或密码错误")
+    if not user.is_active:
+        raise HTTPException(403, "账户已被禁用")
+
+    user.last_login = datetime.utcnow()
+    db.commit()
+
+    access_token = create_access_token(user.id, user.username, user.role)
+    refresh_token = create_refresh_token(user.id)
+
+    return {
+        "code": 0,
+        "data": {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "full_name": user.full_name,
+                "role": user.role,
+            },
+        },
+    }
+
+
+@app.post("/api/auth/register", tags=["认证"])
+async def register(req: RegisterRequest, db: Session = Depends(get_db)):
+    """注册新用户（默认operator角色）"""
+    existing = db.query(User).filter(User.username == req.username).first()
+    if existing:
+        raise HTTPException(400, "用户名已存在")
+
+    if len(req.password) < 6:
+        raise HTTPException(400, "密码至少6位")
+
+    user = User(
+        username=req.username,
+        password_hash=hash_password(req.password),
+        full_name=req.full_name or req.username,
+        role="operator",
+        is_active=1,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return {"code": 0, "data": {"id": user.id, "username": user.username, "message": "注册成功"}}
+
+
+@app.post("/api/auth/refresh", tags=["认证"])
+async def refresh_token(req: RefreshRequest):
+    """刷新 access_token"""
+    payload = decode_token(req.refresh_token)
+    if payload is None or payload.get("type") != "refresh":
+        raise HTTPException(401, "refresh_token无效或已过期")
+
+    access_token = create_access_token(
+        int(payload["sub"]), payload.get("username", ""), payload.get("role", "operator")
+    )
+    return {"code": 0, "data": {"access_token": access_token, "token_type": "bearer"}}
+
+
+@app.get("/api/auth/me", tags=["认证"])
+async def get_me(user: User = Depends(get_current_user)):
+    """获取当前登录用户信息"""
+    return {
+        "code": 0,
+        "data": {
+            "id": user.id,
+            "username": user.username,
+            "full_name": user.full_name,
+            "role": user.role,
+            "last_login": user.last_login.isoformat() if user.last_login else None,
+        },
+    }
 
 
 # ============ 产品源模块 ============
@@ -60,7 +182,7 @@ class ManualProductRequest(BaseModel):
 
 
 @app.post("/api/product/crawl", tags=["产品源"])
-async def crawl_product(req: CrawlRequest, db: Session = Depends(get_db)):
+async def crawl_product(req: CrawlRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """抓取1688商品信息 → 文字闸 → 入库"""
     # Step 1: 抓取
     result = product_importer.import_from_1688(req.source_url)
@@ -120,7 +242,7 @@ async def crawl_product(req: CrawlRequest, db: Session = Depends(get_db)):
 
 
 @app.post("/api/product/manual/create", tags=["产品源"])
-async def manual_create(req: ManualProductRequest, db: Session = Depends(get_db)):
+async def manual_create(req: ManualProductRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """手动录入商品"""
     master = ProductMaster(
         inner_sku=req.inner_sku,
@@ -229,7 +351,7 @@ class PipelineRequest(BaseModel):
 
 
 @app.post("/api/pipeline/run", tags=["流水线"])
-async def run_pipeline(req: PipelineRequest, db: Session = Depends(get_db)):
+async def run_pipeline(req: PipelineRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """一键全链路：抓取→审核→适配→草稿→发布"""
     master = db.query(ProductMaster).filter(ProductMaster.id == req.master_id).first()
     if not master:
@@ -245,7 +367,7 @@ async def run_pipeline(req: PipelineRequest, db: Session = Depends(get_db)):
     }
 
     platforms = [p.strip() for p in req.platforms.split(",")]
-    result = orchestrator.run_full_pipeline(master_data, platforms)
+    result = orchestrator.run_full_pipeline(master_data, platforms, db=db)
 
     # 更新商品状态
     summary = result["summary"]
@@ -303,28 +425,28 @@ class AIKeywordsRequest(BaseModel):
 @app.post("/api/ai/audit", tags=["AI决策"])
 async def ai_audit(req: AIAuditRequest):
     """AI智能审核商品"""
-    result = ai_engine.audit_product(req.title, req.desc, req.attrs)
+    result = ai_engine_mod.ai_engine.audit_product(req.title, req.desc, req.attrs)
     return {"code": 0, "data": result}
 
 
 @app.post("/api/ai/gen_title", tags=["AI决策"])
 async def ai_gen_title(req: AITitleRequest):
     """AI生成商品标题（返回3个版本）"""
-    result = ai_engine.generate_titles(req.product_info, req.platform)
+    result = ai_engine_mod.ai_engine.generate_titles(req.product_info, req.platform)
     return {"code": 0, "data": result}
 
 
 @app.post("/api/ai/optimize_desc", tags=["AI决策"])
 async def ai_optimize_desc(req: AIDescRequest):
     """AI优化商品描述"""
-    result = ai_engine.optimize_description(req.title, req.desc, req.attrs)
+    result = ai_engine_mod.ai_engine.optimize_description(req.title, req.desc, req.attrs)
     return {"code": 0, "data": result}
 
 
 @app.post("/api/ai/keywords", tags=["AI决策"])
 async def ai_extract_keywords(req: AIKeywordsRequest):
     """AI提取热搜关键词"""
-    keywords = ai_engine.extract_keywords(req.title, req.desc)
+    keywords = ai_engine_mod.ai_engine.extract_keywords(req.title, req.desc)
     return {"code": 0, "data": {"keywords": keywords}}
 
 
@@ -347,25 +469,25 @@ async def get_ai_config():
 
 
 @app.post("/api/ai/config/key", tags=["AI配置"])
-async def set_ai_key(req: AIKeyRequest):
+async def set_ai_key(req: AIKeyRequest, user: User = Depends(get_current_user)):
     """设置API Key"""
     return {"code": 0, "data": ai_config.set_api_key(req.api_key)}
 
 
 @app.post("/api/ai/config/provider", tags=["AI配置"])
-async def set_ai_provider(req: AIProviderRequest):
+async def set_ai_provider(req: AIProviderRequest, user: User = Depends(get_current_user)):
     """切换AI提供商（openai/claude）"""
     return {"code": 0, "data": ai_config.set_provider(req.provider)}
 
 
 @app.post("/api/ai/config/model", tags=["AI配置"])
-async def set_ai_model(req: AIModelRequest):
+async def set_ai_model(req: AIModelRequest, user: User = Depends(get_current_user)):
     """设置模型名称"""
     return {"code": 0, "data": ai_config.set_model(req.model)}
 
 
 @app.post("/api/ai/config/test", tags=["AI配置"])
-async def test_ai_connection():
+async def test_ai_connection(user: User = Depends(get_current_user)):
     """测试AI连接是否正常"""
     return {"code": 0, "data": ai_config.test_connection()}
 
@@ -379,7 +501,7 @@ class ImageProcessRequest(BaseModel):
 
 
 @app.post("/api/image/process", tags=["AI图片处理"])
-async def process_image(
+async def process_image(user: User = Depends(get_current_user), 
     file: UploadFile = File(...),
     operations: str = "remove_bg,watermark,optimize",
     watermark_text: str = "",
@@ -468,7 +590,7 @@ async def pending_audit(db: Session = Depends(get_db)):
 
 
 @app.post("/api/audit/submit", tags=["审核"])
-async def submit_audit(rel_id: int, approved: bool, comment: str = "", db: Session = Depends(get_db)):
+async def submit_audit(rel_id: int, approved: bool, comment: str = "", db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """审核通过/驳回"""
     rel = db.query(ProductPlatformRel).filter(ProductPlatformRel.id == rel_id).first()
     if not rel:
@@ -494,7 +616,7 @@ async def submit_audit(rel_id: int, approved: bool, comment: str = "", db: Sessi
 
 
 @app.post("/api/publish/execute", tags=["发布"])
-async def publish_execute(req: PublishRequest):
+async def publish_execute(req: PublishRequest, user: User = Depends(get_current_user)):
     """发布门：三重校验（权限+审核+不重复）"""
     can_pub, reason = publish_gate.can_publish(req.user_id, req.platform, req.draft_id)
     if not can_pub:
@@ -531,26 +653,60 @@ async def publish_status(draft_id: str):
 
 # ============ 启动 ============
 
-@app.on_event("startup")
-async def startup():
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """v0.5.0+ 使用 lifespan 替代 on_event"""
     print("=" * 50)
-    print("  全平台AI自动上架系统 v0.4.0")
-    print("  六层架构 · FastAPI后端")
+    print("  全平台AI自动上架系统 v0.6.0")
+    print("  六层架构 · AI驱动 · 全平台覆盖")
     print("=" * 50)
     try:
         init_db()
         print("[Startup] 数据库初始化完成")
+
+        # 创建默认管理员账户
+        from db.session import SessionLocal
+        sess = SessionLocal()
+        try:
+            admin = sess.query(User).filter(User.username == "admin").first()
+            if not admin:
+                admin = User(
+                    username="admin",
+                    password_hash=hash_password("admin123"),
+                    full_name="系统管理员",
+                    role="admin",
+                    is_active=1,
+                )
+                sess.add(admin)
+                sess.commit()
+                print("[Startup] 默认管理员已创建: admin / admin123")
+        finally:
+            sess.close()
     except Exception as e:
         print(f"[Startup] 数据库未连接(开发模式): {e}")
-    print("[Startup] 系统就绪，访问 http://localhost:8000/docs 查看API文档")
+    print("[Startup] 系统就绪，访问 http://localhost:8800/docs 查看API文档")
+    yield
+    print("[Shutdown] 系统关闭")
+
+
+# 将 lifespan 注入 app（必须在 app 创建后）
+app.router.lifespan_context = lifespan
 
 
 @app.get("/")
 async def root():
     return {
         "name": "全平台AI自动上架系统",
-        "version": "0.5.0",
+        "version": "0.6.0",
         "status": "running",
         "docs": "/docs",
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8800, reload=True)
 

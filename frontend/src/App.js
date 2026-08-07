@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { Layout, Menu, theme } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Layout, Menu, theme, Button, Dropdown, Space, Typography } from 'antd';
 import {
   DashboardOutlined, ShoppingOutlined, ThunderboltOutlined,
-  RobotOutlined, AuditOutlined, SettingOutlined, PictureOutlined
+  RobotOutlined, AuditOutlined, SettingOutlined, PictureOutlined,
+  UserOutlined, LogoutOutlined,
 } from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import ProductManager from './pages/ProductManager';
@@ -11,8 +12,10 @@ import AITools from './pages/AITools';
 import AuditPublish from './pages/AuditPublish';
 import Settings from './pages/Settings';
 import ImageTools from './pages/ImageTools';
+import Login from './pages/Login';
 
 const { Header, Sider, Content } = Layout;
+const { Text } = Typography;
 
 const menuItems = [
   { key: 'dashboard', icon: <DashboardOutlined />, label: '工作台' },
@@ -26,7 +29,27 @@ const menuItems = [
 
 function App() {
   const [current, setCurrent] = useState('dashboard');
+  const [user, setUser] = useState(null);
   const { token: { colorBgContainer, borderRadiusLG } } = theme.useToken();
+
+  useEffect(() => {
+    const saved = localStorage.getItem('user');
+    if (saved) {
+      try { setUser(JSON.parse(saved)); } catch {}
+    }
+  }, []);
+
+  const handleLogin = (userData) => setUser(userData);
+
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
+    setUser(null);
+    setCurrent('dashboard');
+  };
+
+  if (!user) return <Login onLogin={handleLogin} />;
 
   const renderPage = () => {
     switch (current) {
@@ -39,6 +62,15 @@ function App() {
       case 'settings': return <Settings />;
       default: return <Dashboard />;
     }
+  };
+
+  const userMenu = {
+    items: [
+      { key: 'role', label: <Text type="secondary">{user.role === 'admin' ? '管理员' : '操作员'}</Text>, disabled: true },
+      { type: 'divider' },
+      { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true },
+    ],
+    onClick: ({ key }) => { if (key === 'logout') handleLogout(); },
   };
 
   return (
@@ -55,8 +87,13 @@ function App() {
         />
       </Sider>
       <Layout>
-        <Header style={{ padding: '0 24px', background: colorBgContainer, fontSize: 18, fontWeight: 600 }}>
-          全平台AI自动上架管理系统
+        <Header style={{ padding: '0 24px', background: colorBgContainer, fontSize: 18, fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>全平台AI自动上架管理系统</span>
+          <Dropdown menu={userMenu} placement="bottomRight">
+            <Button type="text" icon={<UserOutlined />}>
+              {user?.full_name || user?.username}
+            </Button>
+          </Dropdown>
         </Header>
         <Content style={{ margin: 16, padding: 24, background: colorBgContainer, borderRadius: borderRadiusLG, overflow: 'auto' }}>
           {renderPage()}

@@ -11,6 +11,8 @@ class AIConfigManager:
 
     def __init__(self):
         self._config = self._load()
+        if self._config.get("api_key"):
+            self._reload_engine()
 
     def _load(self) -> Dict:
         if os.path.exists(CONFIG_FILE):

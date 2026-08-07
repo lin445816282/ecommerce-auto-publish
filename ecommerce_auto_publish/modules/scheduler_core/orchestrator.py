@@ -59,7 +59,7 @@ class PipelineOrchestrator:
         self._counter += 1
         return f"{prefix}-{self._counter:06d}"
 
-    def run_full_pipeline(self, master_data: Dict, platforms: List[str]) -> Dict:
+    def run_full_pipeline(self, master_data: Dict, platforms: List[str], db=None) -> Dict:
         """
         完整流水线执行：
         1. 三道闸校验
@@ -158,6 +158,10 @@ class PipelineOrchestrator:
                     task.status = TaskStatus.PUBLISHED
                     task.stage = "published"
                     published += 1
+
+                    # 持久化平台关系
+                    if db:
+                        self._persist_platform_rel(db, master_id, platform, task)
                 else:
                     task.stage = "publish_blocked"
                     task.error = reason
@@ -190,6 +194,35 @@ class PipelineOrchestrator:
         tasks = list(self.tasks.values())
         tasks.sort(key=lambda t: t.created_at, reverse=True)
         return [t.to_dict() for t in tasks[:limit]]
+
+
+    def _persist_platform_rel(self, db, master_id: int, platform: str, task: PipelineTask):
+        """持久化平台商品关系记录"""
+        from db.models import ProductPlatformRel
+        from datetime import datetime
+        now = datetime.utcnow().isoformat()
+
+        # Upsert: find existing or create new
+        rel = db.query(ProductPlatformRel).filter(
+            ProductPlatformRel.master_id == master_id,
+            ProductPlatformRel.platform == platform,
+        ).first()
+
+        if rel:
+            rel.platform_status = "published"
+            rel.platform_draft_data = task.result
+            rel.updated_at = now
+        else:
+            rel = ProductPlatformRel(
+                master_id=master_id,
+                platform=platform,
+                shop_id="default",
+                platform_status="published",
+                platform_draft_data=task.result,
+                platform_item_id=task.draft_id,
+            )
+            db.add(rel)
+        db.commit()
 
 
 # 全局单例
