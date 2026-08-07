@@ -98,10 +98,9 @@ class PublishGate:
 
 publish_gate = PublishGate()
 
-# 初始化默认权限
-publish_gate.set_permission("admin", "taobao", PublishPermission.ADMIN)
-publish_gate.set_permission("admin", "douyin", PublishPermission.ADMIN)
-publish_gate.set_permission("operator", "taobao", PublishPermission.DRAFT)
-publish_gate.set_permission("operator", "douyin", PublishPermission.DRAFT)
+# 初始化默认权限 — 4平台全部授权
+for _plat in ["taobao", "douyin", "pdd", "amazon"]:
+    publish_gate.set_permission("admin", _plat, PublishPermission.ADMIN)
+    publish_gate.set_permission("operator", _plat, PublishPermission.DRAFT)
 
 print("[ExportGate] PublishGate + DraftManager ready.")
