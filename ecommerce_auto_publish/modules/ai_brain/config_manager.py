@@ -22,15 +22,15 @@ class AIConfigManager:
         return {
             "provider": "openai",
             "api_key": "",
-            "model": "gpt-4",
+            "model": "gpt-4.1",
             "enabled": False,
             # per-provider default models
-            "openai_model": "gpt-4",
-            "claude_model": "claude-3-5-sonnet-20241022",
+            "openai_model": "gpt-4.1",
+            "claude_model": "claude-sonnet-4-20250514",
             "deepseek_model": "deepseek-chat",
-            "kimi_model": "moonshot-v1-8k",
-            "doubao_model": "doubao-pro-32k",
-            "qwen_model": "qwen-plus",
+            "kimi_model": "kimi-latest",
+            "doubao_model": "doubao-pro-256k",
+            "qwen_model": "qwen3-235b-a22b",
             "temperature": 0.7,
             "max_tokens": 2048,
         }

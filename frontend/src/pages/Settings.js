@@ -69,44 +69,56 @@ export default function Settings() {
   };
 
   const providers = [
-    { value: 'openai', label: 'OpenAI (GPT-4/3.5)' },
-    { value: 'claude', label: 'Anthropic Claude 3.5' },
+    { value: 'openai', label: 'OpenAI (GPT-4.1 / o4)' },
+    { value: 'claude', label: 'Anthropic Claude 4' },
     { value: 'deepseek', label: 'DeepSeek 深度求索' },
     { value: 'kimi', label: 'Kimi 月之暗面' },
     { value: 'doubao', label: '豆包 字节跳动' },
-    { value: 'qwen', label: '通义千问 阿里云' },
+    { value: 'qwen', label: '通义千问 阿里云 (Qwen3)' },
   ];
 
   const modelMap = {
     openai: [
-      { value: 'gpt-4', label: 'GPT-4' },
-      { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-      { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (快速便宜)' },
+      { value: 'gpt-4.1', label: 'GPT-4.1 ⭐ 最新旗舰 (2025.04)' },
+      { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini (轻量高效)' },
+      { value: 'gpt-4.1-nano', label: 'GPT-4.1 Nano (极速便宜)' },
+      { value: 'gpt-4o', label: 'GPT-4o (多模态)' },
+      { value: 'gpt-4o-mini', label: 'GPT-4o Mini (快+省)' },
+      { value: 'o4-mini', label: 'o4-mini (深度推理)' },
+      { value: 'o3', label: 'o3 (最强推理)' },
     ],
     claude: [
-      { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
-      { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus (最强)' },
-      { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku (最快便宜)' },
+      { value: 'claude-sonnet-4-20250514', label: 'Claude 4 Sonnet ⭐ 最新 (2025.05)' },
+      { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet (经典)' },
+      { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku (快速)' },
+      { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus (深度)' },
     ],
     deepseek: [
-      { value: 'deepseek-chat', label: 'DeepSeek-Chat (通用)' },
-      { value: 'deepseek-reasoner', label: 'DeepSeek-R1 (推理增强)' },
+      { value: 'deepseek-chat', label: 'DeepSeek-V3 ⭐ 最新 (671B MoE)' },
+      { value: 'deepseek-reasoner', label: 'DeepSeek-R1 (深度推理)' },
     ],
     kimi: [
-      { value: 'moonshot-v1-8k', label: 'Moonshot v1 8K' },
-      { value: 'moonshot-v1-32k', label: 'Moonshot v1 32K (长上下文)' },
-      { value: 'moonshot-v1-128k', label: 'Moonshot v1 128K (超长)' },
+      { value: 'kimi-latest', label: 'Kimi 最新版 ⭐ (自动指向最新)' },
+      { value: 'moonshot-v1-128k', label: 'Moonshot v1 128K (超长上下文)' },
+      { value: 'moonshot-v1-32k', label: 'Moonshot v1 32K' },
+      { value: 'moonshot-v1-8k', label: 'Moonshot v1 8K (基础)' },
     ],
     doubao: [
+      { value: 'doubao-pro-256k', label: '豆包 Pro 256K ⭐ 最新旗舰' },
+      { value: 'doubao-pro-128k', label: '豆包 Pro 128K' },
       { value: 'doubao-pro-32k', label: '豆包 Pro 32K' },
-      { value: 'doubao-lite-32k', label: '豆包 Lite 32K (轻量)' },
-      { value: 'doubao-pro-128k', label: '豆包 Pro 128K (长文本)' },
+      { value: 'doubao-lite-128k', label: '豆包 Lite 128K (轻量)' },
+      { value: 'doubao-lite-32k', label: '豆包 Lite 32K (极速)' },
+      { value: 'doubao-1.5-pro-256k', label: '豆包 1.5 Pro 256K' },
     ],
     qwen: [
-      { value: 'qwen-plus', label: '通义千问 Plus' },
-      { value: 'qwen-turbo', label: '通义千问 Turbo (快速)' },
-      { value: 'qwen-max', label: '通义千问 Max (最强)' },
-      { value: 'qwen-long', label: '通义千问 Long (长文档)' },
+      { value: 'qwen3-235b-a22b', label: 'Qwen3 235B ⭐ 最新旗舰' },
+      { value: 'qwen3-235b-a22b-thinking', label: 'Qwen3 235B 思考版 (推理增强)' },
+      { value: 'qwen-plus', label: '通义千问 Plus (均衡)' },
+      { value: 'qwen-max', label: '通义千问 Max (最强理解)' },
+      { value: 'qwen-turbo', label: '通义千问 Turbo (快速便宜)' },
+      { value: 'qwen-long', label: '通义千问 Long (长文档1000万Token)' },
+      { value: 'qwen-vl-plus', label: '通义千问 VL (多模态视觉)' },
     ],
   };
 

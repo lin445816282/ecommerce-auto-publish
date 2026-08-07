@@ -6,12 +6,12 @@ import httpx
 
 # 各厂商 API 端点 + 默认模型
 PROVIDER_CONFIG = {
-    "openai":      {"base_url": "https://api.openai.com/v1",            "default_model": "gpt-4"},
-    "claude":      {"base_url": "https://api.anthropic.com/v1",         "default_model": "claude-3-5-sonnet-20241022"},
+    "openai":      {"base_url": "https://api.openai.com/v1",            "default_model": "gpt-4.1"},
+    "claude":      {"base_url": "https://api.anthropic.com/v1",         "default_model": "claude-sonnet-4-20250514"},
     "deepseek":    {"base_url": "https://api.deepseek.com/v1",          "default_model": "deepseek-chat"},
-    "kimi":        {"base_url": "https://api.moonshot.cn/v1",           "default_model": "moonshot-v1-8k"},
-    "doubao":      {"base_url": "https://ark.cn-beijing.volces.com/api/v3", "default_model": "doubao-pro-32k"},
-    "qwen":        {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "default_model": "qwen-plus"},
+    "kimi":        {"base_url": "https://api.moonshot.cn/v1",           "default_model": "kimi-latest"},
+    "doubao":      {"base_url": "https://ark.cn-beijing.volces.com/api/v3", "default_model": "doubao-pro-256k"},
+    "qwen":        {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "default_model": "qwen3-235b-a22b"},
 }
 
 
