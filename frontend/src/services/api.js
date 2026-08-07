@@ -106,6 +106,12 @@ export const runPipeline = (masterId, platforms) =>
 export const getPipelineTasks = () => api.get('/pipeline/tasks');
 export const getPipelineTask = (taskId) => api.get(`/pipeline/task/${taskId}`);
 
+// 任务监控
+export const getMonitorSummary = () => api.get('/monitor/summary');
+export const getMonitorTasks = (status, platform, skip = 0, limit = 30) =>
+  api.get('/monitor/tasks', { params: { status, platform, skip, limit } });
+export const retryTask = (taskId) => api.post(`/monitor/retry/${taskId}`);
+
 // 工作台
 export const getDashboardStats = () => api.get('/dashboard/stats');
 

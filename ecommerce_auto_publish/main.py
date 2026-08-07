@@ -714,6 +714,124 @@ async def get_pipeline_task(task_id: str):
     return {"code": 0, "data": task}
 
 
+# --- 任务监控 & 重试 ---
+
+@app.get("/api/monitor/summary", tags=["调度"])
+async def monitor_summary(db: Session = Depends(get_db)):
+    """任务监控摘要"""
+    from sqlalchemy import func
+
+    total_tasks = orchestrator.list_tasks()
+    total_db = db.query(TaskJob).count()
+
+    by_status = {}
+    for t in total_tasks:
+        st = t.get("status", "unknown")
+        by_status[st] = by_status.get(st, 0) + 1
+
+    # DB task stats
+    db_stats = {}
+    for s, c in db.query(TaskJob.job_status, func.count(TaskJob.id)).group_by(TaskJob.job_status).all():
+        label = {0: "queued", 1: "running", 2: "success", 3: "failed"}.get(s, "unknown")
+        db_stats[label] = c
+
+    # Product status overview for monitor
+    status_counts = {}
+    for s, c in db.query(ProductMaster.status, func.count(ProductMaster.id)).group_by(ProductMaster.status).all():
+        status_counts[STATUS_LABELS.get(s, f"unknown_{s}")] = c
+
+    return {
+        "code": 0,
+        "data": {
+            "pipeline": {
+                "total": len(total_tasks),
+                "by_status": by_status,
+                "recent": total_tasks[:10],
+            },
+            "db_tasks": {
+                "total": total_db,
+                "by_status": db_stats,
+            },
+            "products": status_counts,
+            "orchestrator_healthy": True,
+        },
+    }
+
+
+@app.get("/api/monitor/tasks", tags=["调度"])
+async def monitor_tasks(
+    status: Optional[str] = None,
+    platform: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 30,
+    db: Session = Depends(get_db),
+):
+    """任务列表（合并DB+流水线）"""
+    # Pipeline tasks (in-memory)
+    pipe_tasks = orchestrator.list_tasks()
+    pipe_set = {t["task_id"]: t for t in pipe_tasks}
+
+    # DB tasks
+    query = db.query(TaskJob).order_by(TaskJob.id.desc())
+    if status:
+        st_map = {"queued": 0, "running": 1, "success": 2, "failed": 3}
+        st_val = st_map.get(status)
+        if st_val is not None:
+            query = query.filter(TaskJob.job_status == st_val)
+    if platform:
+        query = query.filter(TaskJob.platform == platform)
+
+    total = query.count()
+    db_items = query.offset(skip).limit(limit).all()
+
+    # Build unified task list
+    items = []
+    for t in db_items:
+        item = {
+            "id": t.id,
+            "task_id": f"DB-{t.id:06d}",
+            "job_type": t.job_type,
+            "master_id": t.master_id,
+            "platform": t.platform,
+            "status": {0: "queued", 1: "running", 2: "success", 3: "failed"}.get(t.job_status, "unknown"),
+            "retry_count": t.retry_count,
+            "max_retry": t.max_retry,
+            "result": t.result,
+            "create_time": t.create_time.isoformat() if t.create_time else None,
+            "pipeline": pipe_set.get(f"DB-{t.id:06d}", None),
+        }
+        items.append(item)
+
+    return {"code": 0, "data": {"total": total, "items": items}}
+
+
+@app.post("/api/monitor/retry/{task_id}", tags=["调度"])
+async def retry_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """重试失败任务"""
+    task = db.query(TaskJob).filter(TaskJob.id == task_id).first()
+    if not task:
+        raise HTTPException(404, "任务不存在")
+
+    if task.job_status == 0:
+        raise HTTPException(400, "任务尚未执行，无需重试")
+    if task.job_status == 2:
+        raise HTTPException(400, "任务已成功，无需重试")
+    if task.retry_count >= task.max_retry:
+        raise HTTPException(400, f"已达最大重试次数({task.max_retry})")
+
+    # Reset and re-queue
+    task.job_status = 0
+    task.retry_count = (task.retry_count or 0) + 1
+    task.next_run_time = datetime.utcnow()
+    db.commit()
+
+    return {"code": 0, "data": {"task_id": task.id, "retry_count": task.retry_count, "message": "已重新加入队列"}}
+
+
 # ============ AI决策层 ============
 
 class AIAuditRequest(BaseModel):
