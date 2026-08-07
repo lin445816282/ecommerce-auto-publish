@@ -1,9 +1,10 @@
 """全平台AI自动上架系统 — FastAPI入口 v0.4.0"""
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
+import base64
 
 from db.session import init_db, get_db
 from db.models import ProductMaster, ProductPlatformRel, TaskJob, AuditRecord
@@ -16,6 +17,7 @@ from modules.scheduler_core.orchestrator import orchestrator
 from modules.export_gate.publisher import publish_gate, PublishPermission
 from modules.ai_brain.engine import ai_engine
 from modules.ai_brain.config_manager import ai_config
+from modules.ai_brain.image_processor import image_processor as img_proc
 
 app = FastAPI(
     title="全平台AI自动上架系统",
@@ -366,6 +368,54 @@ async def set_ai_model(req: AIModelRequest):
 async def test_ai_connection():
     """测试AI连接是否正常"""
     return {"code": 0, "data": ai_config.test_connection()}
+
+
+# ============ AI图片处理 ============
+
+class ImageProcessRequest(BaseModel):
+    operations: List[str] = ["remove_bg", "watermark", "optimize"]
+    watermark_text: str = ""
+    platform: str = "taobao"
+
+
+@app.post("/api/image/process", tags=["AI图片处理"])
+async def process_image(
+    file: UploadFile = File(...),
+    operations: str = "remove_bg,watermark,optimize",
+    watermark_text: str = "",
+    platform: str = "taobao",
+):
+    """上传图片 → AI抠图/水印/平台优化 → 返回base64预览"""
+    ops = [o.strip() for o in operations.split(",") if o.strip()]
+    image_data = await file.read()
+    result = img_proc.process_image(image_data, ops, watermark_text, platform)
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("error", "处理失败"))
+    return {"code": 0, "data": result}
+
+
+@app.post("/api/image/batch", tags=["AI图片处理"])
+async def batch_process_images(
+    files: List[UploadFile] = File(...),
+    operations: str = "remove_bg,watermark,optimize",
+    watermark_text: str = "",
+    platform: str = "taobao",
+):
+    """批量上传图片处理"""
+    ops = [o.strip() for o in operations.split(",") if o.strip()]
+    results = []
+    for file in files:
+        image_data = await file.read()
+        result = img_proc.process_image(image_data, ops, watermark_text, platform)
+        results.append({"filename": file.filename, **result})
+    return {"code": 0, "data": results}
+
+
+@app.get("/api/image/specs", tags=["AI图片处理"])
+async def get_image_specs():
+    """获取各平台图片规范"""
+    from modules.ai_brain.image_processor import PLATFORM_SPECS
+    return {"code": 0, "data": PLATFORM_SPECS}
 
 
 # ============ 出口（审核发布） ============

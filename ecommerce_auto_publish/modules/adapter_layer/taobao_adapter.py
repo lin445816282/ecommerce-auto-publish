@@ -30,12 +30,15 @@ class TaobaoAdapter(BasePlatformAdapter):
         }
 
     def check_required(self, payload: Dict[str, Any]) -> List[str]:
-        required = ["title", "price", "pic_urls", "category_cid"]
+        required = ["title", "price", "category_cid"]
         missing = []
         for f in required:
             val = payload.get(f)
             if val is None or (isinstance(val, str) and val == ""):
                 missing.append(f)
+        # pic_urls: required but auto-fill placeholder if empty
+        if not payload.get("pic_urls"):
+            payload["pic_urls"] = ["https://via.placeholder.com/800x800?text=NO_IMAGE"]
         return missing
 
     def upload_images(self, image_list: List[str]) -> List[str]:

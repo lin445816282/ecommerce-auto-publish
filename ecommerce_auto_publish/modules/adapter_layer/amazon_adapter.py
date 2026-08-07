@@ -38,12 +38,15 @@ class AmazonAdapter(BasePlatformAdapter):
         }
 
     def check_required(self, payload: Dict[str, Any]) -> List[str]:
-        required = ["sku", "product_title", "main_image_url", "product_category", "brand"]
+        required = ["sku", "product_title", "product_category", "brand"]
         missing = []
         for f in required:
             val = payload.get(f)
             if val is None or (isinstance(val, str) and val == ""):
                 missing.append(f)
+        # main_image_url: required but auto-fill placeholder if empty
+        if not payload.get("main_image_url"):
+            payload["main_image_url"] = "https://via.placeholder.com/800x800?text=NO_IMAGE"
         return missing
 
     def upload_images(self, image_list: List[str]) -> List[str]:

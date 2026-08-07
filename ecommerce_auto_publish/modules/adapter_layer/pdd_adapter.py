@@ -34,14 +34,15 @@ class PddAdapter(BasePlatformAdapter):
         }
 
     def check_required(self, payload: Dict[str, Any]) -> List[str]:
-        required = ["goods_name", "cat_id", "image_urls"]
+        required = ["goods_name", "cat_id"]
         missing = []
         for f in required:
             val = payload.get(f)
             if val is None or (isinstance(val, str) and val == ""):
                 missing.append(f)
-            elif isinstance(val, list) and len(val) == 0:
-                missing.append(f)
+        # image_urls: required but auto-generate placeholder if empty
+        if not payload.get("image_urls"):
+            payload["image_urls"] = ["https://via.placeholder.com/800x800?text=NO_IMAGE"]
         return missing
 
     def upload_images(self, image_list: List[str]) -> List[str]:
