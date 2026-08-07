@@ -1,4 +1,4 @@
-"""全平台AI自动上架系统 — FastAPI入口 v0.7.0 (JWT Auth)"""
+"""全平台AI自动上架系统 — FastAPI入口 v0.11.0 (Browser Automation)"""
 import csv
 import io
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, UploadFile, File
@@ -29,7 +29,7 @@ from modules.auth.jwt_handler import (
 app = FastAPI(
     title="全平台AI自动上架系统",
     description="支持淘宝/天猫/抖店/拼多多/亚马逊的多平台AI自动上架",
-    version="0.5.0",
+    version="0.11.0",
 )
 
 # CORS
@@ -832,6 +832,40 @@ async def retry_task(
     return {"code": 0, "data": {"task_id": task.id, "retry_count": task.retry_count, "message": "已重新加入队列"}}
 
 
+@app.get("/api/monitor/browser", tags=["调度"])
+async def browser_status():
+    """浏览器自动化状态 — 检查 Playwright + Chromium + 各平台会话"""
+    result = {
+        "available": False,
+        "playwright_ok": False,
+        "chromium_ok": False,
+        "sessions": [],
+        "message": "",
+    }
+    try:
+        from modules.adapter_layer.browser import browser_pool
+        from playwright.async_api import async_playwright
+
+        result["playwright_ok"] = True
+
+        # Test chromium launch
+        pw = await async_playwright().start()
+        browser = await pw.chromium.launch(headless=True)
+        ver = browser.version
+        await browser.close()
+        await pw.stop()
+
+        result["chromium_ok"] = True
+        result["available"] = True
+        result["chromium_version"] = ver
+        result["sessions"] = browser_pool.list_sessions()
+        result["message"] = f"浏览器自动化就绪 (Chromium {ver})"
+    except Exception as e:
+        result["message"] = str(e)
+
+    return {"code": 0, "data": result}
+
+
 # ============ AI决策层 ============
 
 class AIAuditRequest(BaseModel):
@@ -1092,9 +1126,9 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """v0.5.0+ 使用 lifespan 替代 on_event"""
+    """v0.10.0+ 使用 lifespan 替代 on_event"""
     print("=" * 50)
-    print("  全平台AI自动上架系统 v0.6.0")
+    print("  全平台AI自动上架系统 v0.10.0")
     print("  六层架构 · AI驱动 · 全平台覆盖")
     print("=" * 50)
     try:
@@ -1132,11 +1166,21 @@ app.router.lifespan_context = lifespan
 
 @app.get("/")
 async def root():
+    browser_available = False
+    try:
+        from modules.adapter_layer.browser import browser_pool
+        from playwright.async_api import async_playwright
+        browser_available = True
+    except ImportError:
+        pass
+
     return {
         "name": "全平台AI自动上架系统",
-        "version": "0.6.0",
+        "version": "0.11.0",
         "status": "running",
         "docs": "/docs",
+        "browser_automation": browser_available,
+        "platforms": ["taobao", "douyin", "pdd", "amazon"],
     }
 
 

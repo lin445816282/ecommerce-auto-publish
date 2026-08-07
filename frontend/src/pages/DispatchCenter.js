@@ -8,7 +8,7 @@ import {
   CloseCircleOutlined, ClockCircleOutlined, SyncOutlined,
   DashboardOutlined, UnorderedListOutlined,
 } from '@ant-design/icons';
-import { getMonitorSummary, getMonitorTasks, retryTask } from '../services/api';
+import { getMonitorSummary, getMonitorTasks, retryTask, getBrowserStatus } from '../services/api';
 
 const { Title, Text } = Typography;
 
@@ -31,17 +31,20 @@ export default function DispatchCenter() {
   const [statusFilter, setStatusFilter] = useState(null);
   const [platformFilter, setPlatformFilter] = useState(null);
   const [tab, setTab] = useState('overview');
+  const [browserStatus, setBrowserStatus] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [sumRes, taskRes] = await Promise.all([
+      const [sumRes, taskRes, bwRes] = await Promise.all([
         getMonitorSummary(),
         getMonitorTasks(statusFilter, platformFilter),
+        getBrowserStatus().catch(() => ({ data: { data: { available: false } } })),
       ]);
       setSummary(sumRes.data.data);
       setTasks(taskRes.data.data.items || []);
       setTotal(taskRes.data.data.total || 0);
+      setBrowserStatus(bwRes.data.data);
     } catch { message.error('无法连接后端'); }
     setLoading(false);
   }, [statusFilter, platformFilter]);
@@ -130,6 +133,41 @@ export default function DispatchCenter() {
                   <Card size="small"><Statistic title="DB任务" value={s.db_tasks?.total || 0} /></Card>
                 </Col>
               </Row>
+
+              {/* Browser automation status */}
+              {browserStatus && (
+                <Card
+                  size="small"
+                  title={
+                    <Space>
+                      <span>🤖 浏览器自动化</span>
+                      <Badge
+                        status={browserStatus.available ? 'success' : 'error'}
+                        text={browserStatus.available ? '就绪' : '未就绪'}
+                      />
+                    </Space>
+                  }
+                  style={{ marginBottom: 16 }}
+                >
+                  <Text type="secondary">
+                    {browserStatus.message}
+                    {browserStatus.chromium_version && (
+                      <Tag color="blue" style={{ marginLeft: 8 }}>Chromium {browserStatus.chromium_version}</Tag>
+                    )}
+                  </Text>
+                  {browserStatus.sessions?.length > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      {browserStatus.sessions.map(s => (
+                        <Tag key={s.session_id} color={s.status === 'busy' ? 'orange' : 'green'}>
+                          {({ taobao: '🍑', douyin: '🎵', pdd: '📦', amazon: '🌍' })[s.platform] || s.platform}
+                          {' '}{s.status}
+                          {s.has_state && ' ✓'}
+                        </Tag>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              )}
 
               {/* Product status */}
               <Card title="商品状态分布" size="small" style={{ marginBottom: 16 }}>

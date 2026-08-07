@@ -111,6 +111,7 @@ export const getMonitorSummary = () => api.get('/monitor/summary');
 export const getMonitorTasks = (status, platform, skip = 0, limit = 30) =>
   api.get('/monitor/tasks', { params: { status, platform, skip, limit } });
 export const retryTask = (taskId) => api.post(`/monitor/retry/${taskId}`);
+export const getBrowserStatus = () => api.get('/monitor/browser');
 
 // 工作台
 export const getDashboardStats = () => api.get('/dashboard/stats');

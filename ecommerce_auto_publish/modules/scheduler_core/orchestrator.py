@@ -1,4 +1,7 @@
-"""流水线编排器 — 全链路：抓取→合规闸→适配→草稿→审核→发布"""
+"""流水线编排器 — 全链路：抓取→合规闸→适配→草稿→审核→发布
+
+v0.11.0: 优先使用浏览器自动化适配器（Playwright），失败时回退到 Mock 适配器
+"""
 import json
 import time
 import threading
@@ -6,6 +9,13 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from dataclasses import dataclass, field
 from enum import Enum
+
+HAS_BROWSER_AUTOMATION = False
+try:
+    from modules.adapter_layer.browser import get_browser_adapter
+    HAS_BROWSER_AUTOMATION = True
+except ImportError:
+    pass
 
 
 class TaskStatus(Enum):
@@ -109,30 +119,49 @@ class PipelineOrchestrator:
             )
 
             try:
-                # Step 2: 平台适配
+                # Step 2: 平台适配 (v0.11.0: 优先浏览器自动化)
                 task.status = TaskStatus.RUNNING
                 task.stage = "adapting"
 
-                adapter_module = __import__(
-                    f"modules.adapter_layer.{platform}_adapter",
-                    fromlist=[f"{platform.capitalize()}Adapter"]
-                )
-                adapter_class = getattr(adapter_module, f"{platform.capitalize()}Adapter")
-                cfg = platform_configs.get(platform, {"shop_id": "default"})
-                adapter = adapter_class(cfg)
+                adapt_result = None
+                adapter_used = "mock"
 
-                adapt_result = adapter.full_pipeline(master_data)
+                # 尝试浏览器自动化适配器
+                if HAS_BROWSER_AUTOMATION:
+                    try:
+                        print(f"[Orchestrator] 尝试浏览器自动化 → {platform}")
+                        cfg = platform_configs.get(platform, {"shop_id": "default"})
+                        browser_adapter = get_browser_adapter(platform, cfg)
+                        adapt_result = browser_adapter.full_pipeline(master_data)
+                        adapter_used = "browser"
+                    except Exception as be:
+                        print(f"[Orchestrator] 浏览器适配失败，回退到Mock: {be}")
+
+                # 回退到 Mock API 适配器
+                if adapt_result is None:
+                    adapter_module = __import__(
+                        f"modules.adapter_layer.{platform}_adapter",
+                        fromlist=[f"{platform.capitalize()}Adapter"]
+                    )
+                    adapter_class = getattr(adapter_module, f"{platform.capitalize()}Adapter")
+                    cfg = platform_configs.get(platform, {"shop_id": "default"})
+                    adapter = adapter_class(cfg)
+                    adapt_result = adapter.full_pipeline(master_data)
+                    adapter_used = "mock"
+                    print(f"[Orchestrator] 使用 Mock 适配器 → {platform}")
 
                 if not adapt_result["success"]:
                     task.status = TaskStatus.FAILED
                     task.stage = "adapt_failed"
                     task.error = adapt_result.get("error", "适配失败")
+                    task.result["adapter"] = adapter_used
                     self.tasks[task_id] = task
                     results["tasks"].append(task.to_dict())
                     continue
 
                 task.draft_id = adapt_result["draft_id"]
                 task.stage = "adapted"
+                task.result["adapter"] = adapter_used
                 passed += 1
 
                 # Step 3: 保存草稿

@@ -1,10 +1,10 @@
 # 全平台AI自动上架系统 — 项目执行计划
 
-## 项目状态：🟢 v0.8.0 全部完成
+## 项目状态：🟢 v0.11.0 进行中
 **项目经理**：AI（小林辅助决策）  
 **开始日期**：2026-08-06  
 **仓库**：[github.com/lin445816282/ecommerce-auto-publish](https://github.com/lin445816282/ecommerce-auto-publish)  
-**提交数**：17 commits
+**提交数**：20 commits
 
 ---
 
@@ -207,3 +207,59 @@ docker compose up -d --build
                 ↓ 全部通过→4平台同时发布
        ✅ total:4  passed:4  published:4  stage:complete
 ```
+
+---
+
+## v0.11.0 浏览器自动化 (2026-08-07)
+
+### 核心变更
+- **问题**: 淘宝等平台无真实API，个体卖家只能通过页面操作发布商品
+- **方案**: Playwright + Chromium 浏览器自动化层，直接操作平台后台页面
+
+### 新增模块
+| 文件 | 说明 |
+|------|------|
+| `modules/adapter_layer/browser/browser_pool.py` | 浏览器池管理 — 单例，管理多平台会话生命周期 |
+| `modules/adapter_layer/browser/browser_base.py` | 浏览器适配器基类 — 抽象方法 + sync/async 双模式 |
+| `modules/adapter_layer/browser/taobao_browser.py` | 淘宝千牛适配器 — 扫码登录 + 草稿保存 |
+| `modules/adapter_layer/browser/douyin_browser.py` | 抖店适配器 — 短信验证码登录 |
+| `modules/adapter_layer/browser/pdd_browser.py` | 拼多多适配器 |
+| `modules/adapter_layer/browser/amazon_browser.py` | 亚马逊适配器 — 邮箱密码登录 |
+| `modules/adapter_layer/browser/__init__.py` | `get_browser_adapter()` 工厂函数 |
+
+### 技术架构
+```
+Orchestrator
+    ↓ 优先尝试
+BrowserPlatformAdapter (Playwright)
+    ↓ full_pipeline_async
+    ├─ init_session → BrowserPool.get_session()
+    ├─ check_login → 检测登录状态
+    ├─ do_login → 扫码/短信/密码
+    ├─ navigate_to_publish → 导航到发布页
+    ├─ fill_category → 类目搜索选择
+    ├─ fill_basic_info → 标题/价格/库存
+    ├─ upload_product_images → 图片上传
+    └─ submit_as_draft → 保存草稿
+    ↓ 失败时回退
+{platform}_adapter (Mock API)
+```
+
+### 浏览器池特性
+- **会话复用**: 同一平台同一店铺复用 BrowserContext
+- **状态持久化**: storage_state JSON 保存 cookie + login 状态
+- **反检测**: `navigator.webdriver = false` + chrome.runtime 注入
+- **空闲回收**: 10分钟无使用自动关闭
+- **截屏记录**: 关键步骤自动截图到 `data/screenshots/`
+
+### 新增API
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/monitor/browser` | GET | 浏览器自动化状态检查 |
+
+### 部署依赖
+```bash
+pip install playwright
+playwright install chromium
+```
+
