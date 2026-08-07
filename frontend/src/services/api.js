@@ -45,4 +45,17 @@ export const runPipeline = (masterId, platforms) =>
 export const getPipelineTasks = () => api.get('/pipeline/tasks');
 export const getPipelineTask = (taskId) => api.get(`/pipeline/task/${taskId}`);
 
+// 图片处理
+export const processImage = (file, operations, watermarkText, platform) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('operations', operations);
+  formData.append('watermark_text', watermarkText || '');
+  formData.append('platform', platform || 'taobao');
+  return api.post('/image/process', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+};
+export const getImageSpecs = () => api.get('/image/specs');
+
 export default api;

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Layout, Menu, theme } from 'antd';
 import {
   DashboardOutlined, ShoppingOutlined, ThunderboltOutlined,
-  RobotOutlined, AuditOutlined, SettingOutlined
+  RobotOutlined, AuditOutlined, SettingOutlined, PictureOutlined
 } from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import ProductManager from './pages/ProductManager';
@@ -10,6 +10,7 @@ import DispatchCenter from './pages/DispatchCenter';
 import AITools from './pages/AITools';
 import AuditPublish from './pages/AuditPublish';
 import Settings from './pages/Settings';
+import ImageTools from './pages/ImageTools';
 
 const { Header, Sider, Content } = Layout;
 
@@ -18,6 +19,7 @@ const menuItems = [
   { key: 'products', icon: <ShoppingOutlined />, label: '商品管理' },
   { key: 'dispatch', icon: <ThunderboltOutlined />, label: '调度分发' },
   { key: 'ai', icon: <RobotOutlined />, label: 'AI工具' },
+  { key: 'images', icon: <PictureOutlined />, label: '图片处理' },
   { key: 'audit', icon: <AuditOutlined />, label: '审核发布' },
   { key: 'settings', icon: <SettingOutlined />, label: '系统设置' },
 ];
@@ -32,6 +34,7 @@ function App() {
       case 'products': return <ProductManager />;
       case 'dispatch': return <DispatchCenter />;
       case 'ai': return <AITools />;
+      case 'images': return <ImageTools />;
       case 'audit': return <AuditPublish />;
       case 'settings': return <Settings />;
       default: return <Dashboard />;
