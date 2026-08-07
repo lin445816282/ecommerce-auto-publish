@@ -1,4 +1,4 @@
-"""全平台AI自动上架系统 — FastAPI入口 v0.4.0"""
+"""全平台AI自动上架系统 — FastAPI入口 v0.5.0"""
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -22,7 +22,7 @@ from modules.ai_brain.image_processor import image_processor as img_proc
 app = FastAPI(
     title="全平台AI自动上架系统",
     description="支持淘宝/天猫/抖店/拼多多/亚马逊的多平台AI自动上架",
-    version="0.4.0",
+    version="0.5.0",
 )
 
 # CORS
