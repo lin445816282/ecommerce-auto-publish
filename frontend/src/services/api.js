@@ -48,6 +48,9 @@ export const runPipeline = (masterId, platforms) =>
 export const getPipelineTasks = () => api.get('/pipeline/tasks');
 export const getPipelineTask = (taskId) => api.get(`/pipeline/task/${taskId}`);
 
+// 工作台
+export const getDashboardStats = () => api.get('/dashboard/stats');
+
 // 图片处理
 export const processImage = (file, operations, watermarkText, platform) => {
   const formData = new FormData();

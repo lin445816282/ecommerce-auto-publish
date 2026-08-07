@@ -418,6 +418,44 @@ async def get_image_specs():
     return {"code": 0, "data": PLATFORM_SPECS}
 
 
+# ============ 工作台仪表盘 ============
+
+STATUS_LABELS = {0: "待处理", 1: "待审核", 2: "草稿", 3: "部分上架", 4: "全部上架", 5: "作废"}
+
+
+@app.get("/api/dashboard/stats", tags=["工作台"])
+async def dashboard_stats(db: Session = Depends(get_db)):
+    """聚合统计数据"""
+    total = db.query(ProductMaster).count()
+    # 按状态分组
+    from sqlalchemy import func
+    status_rows = db.query(ProductMaster.status, func.count(ProductMaster.id)).group_by(ProductMaster.status).all()
+    by_status = {STATUS_LABELS.get(s, f"未知{s}"): c for s, c in status_rows}
+    # 按平台分组
+    platform_rows = db.query(ProductPlatformRel.platform, func.count(ProductPlatformRel.id)).group_by(
+        ProductPlatformRel.platform).all()
+    by_platform = {p: c for p, c in platform_rows}
+    # 最近流水线
+    recent = orchestrator.list_tasks()[:5]
+    # 待审核数
+    pending = db.query(ProductMaster).filter(ProductMaster.status == 1).count()
+    # 预警数(作废+待审核)
+    alerts = db.query(ProductMaster).filter(ProductMaster.status.in_([1, 5])).count()
+
+    return {
+        "code": 0,
+        "data": {
+            "total": total,
+            "published": by_status.get("全部上架", 0) + by_status.get("部分上架", 0),
+            "pending": pending,
+            "alerts": alerts,
+            "by_status": by_status,
+            "by_platform": by_platform,
+            "recent_pipelines": recent,
+        },
+    }
+
+
 # ============ 出口（审核发布） ============
 
 @app.get("/api/audit/pending/list", tags=["审核"])
