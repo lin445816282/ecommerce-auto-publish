@@ -15,6 +15,7 @@ from modules.scheduler_core.task_dispatcher import dispatcher
 from modules.scheduler_core.orchestrator import orchestrator
 from modules.export_gate.publisher import publish_gate, PublishPermission
 from modules.ai_brain.engine import ai_engine
+from modules.ai_brain.config_manager import ai_config
 
 app = FastAPI(
     title="全平台AI自动上架系统",
@@ -323,6 +324,48 @@ async def ai_extract_keywords(req: AIKeywordsRequest):
     """AI提取热搜关键词"""
     keywords = ai_engine.extract_keywords(req.title, req.desc)
     return {"code": 0, "data": {"keywords": keywords}}
+
+
+# ============ AI配置管理 ============
+
+class AIKeyRequest(BaseModel):
+    api_key: str
+
+class AIProviderRequest(BaseModel):
+    provider: str  # openai / claude
+
+class AIModelRequest(BaseModel):
+    model: str
+
+
+@app.get("/api/ai/config", tags=["AI配置"])
+async def get_ai_config():
+    """获取当前AI配置（Key脱敏）"""
+    return {"code": 0, "data": ai_config.get_config()}
+
+
+@app.post("/api/ai/config/key", tags=["AI配置"])
+async def set_ai_key(req: AIKeyRequest):
+    """设置API Key"""
+    return {"code": 0, "data": ai_config.set_api_key(req.api_key)}
+
+
+@app.post("/api/ai/config/provider", tags=["AI配置"])
+async def set_ai_provider(req: AIProviderRequest):
+    """切换AI提供商（openai/claude）"""
+    return {"code": 0, "data": ai_config.set_provider(req.provider)}
+
+
+@app.post("/api/ai/config/model", tags=["AI配置"])
+async def set_ai_model(req: AIModelRequest):
+    """设置模型名称"""
+    return {"code": 0, "data": ai_config.set_model(req.model)}
+
+
+@app.post("/api/ai/config/test", tags=["AI配置"])
+async def test_ai_connection():
+    """测试AI连接是否正常"""
+    return {"code": 0, "data": ai_config.test_connection()}
 
 
 # ============ 出口（审核发布） ============

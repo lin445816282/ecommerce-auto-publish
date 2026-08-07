@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { Layout, Menu, theme } from 'antd';
 import {
   DashboardOutlined, ShoppingOutlined, ThunderboltOutlined,
-  RobotOutlined, AuditOutlined, SendOutlined
+  RobotOutlined, AuditOutlined, SettingOutlined
 } from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import ProductManager from './pages/ProductManager';
 import DispatchCenter from './pages/DispatchCenter';
 import AITools from './pages/AITools';
 import AuditPublish from './pages/AuditPublish';
+import Settings from './pages/Settings';
 
 const { Header, Sider, Content } = Layout;
 
@@ -18,6 +19,7 @@ const menuItems = [
   { key: 'dispatch', icon: <ThunderboltOutlined />, label: '调度分发' },
   { key: 'ai', icon: <RobotOutlined />, label: 'AI工具' },
   { key: 'audit', icon: <AuditOutlined />, label: '审核发布' },
+  { key: 'settings', icon: <SettingOutlined />, label: '系统设置' },
 ];
 
 function App() {
@@ -31,6 +33,7 @@ function App() {
       case 'dispatch': return <DispatchCenter />;
       case 'ai': return <AITools />;
       case 'audit': return <AuditPublish />;
+      case 'settings': return <Settings />;
       default: return <Dashboard />;
     }
   };

@@ -32,4 +32,17 @@ export const publishProduct = (draftId, platform) =>
   api.post('/publish/execute', { draft_id: draftId, platform, user_id: 'admin' });
 export const getPublishStatus = (draftId) => api.get(`/publish/status/${draftId}`);
 
+// AI配置
+export const getAIConfig = () => api.get('/ai/config');
+export const setAIKey = (apiKey) => api.post('/ai/config/key', { api_key: apiKey });
+export const setAIProvider = (provider) => api.post('/ai/config/provider', { provider });
+export const setAIModel = (model) => api.post('/ai/config/model', { model });
+export const testAIConnection = () => api.post('/ai/config/test');
+
+// 流水线
+export const runPipeline = (masterId, platforms) =>
+  api.post('/pipeline/run', { master_id: masterId, platforms });
+export const getPipelineTasks = () => api.get('/pipeline/tasks');
+export const getPipelineTask = (taskId) => api.get(`/pipeline/task/${taskId}`);
+
 export default api;
