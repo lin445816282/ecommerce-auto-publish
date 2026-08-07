@@ -1,8 +1,18 @@
-"""AI决策层 — 智能审核 + 标题生成 + 描述优化"""
+"""AI决策层 — 智能审核 + 标题生成 + 描述优化  (支持6家模型)"""
 import json
 import os
 from typing import Dict, List, Optional
 import httpx
+
+# 各厂商 API 端点 + 默认模型
+PROVIDER_CONFIG = {
+    "openai":      {"base_url": "https://api.openai.com/v1",            "default_model": "gpt-4"},
+    "claude":      {"base_url": "https://api.anthropic.com/v1",         "default_model": "claude-3-5-sonnet-20241022"},
+    "deepseek":    {"base_url": "https://api.deepseek.com/v1",          "default_model": "deepseek-chat"},
+    "kimi":        {"base_url": "https://api.moonshot.cn/v1",           "default_model": "moonshot-v1-8k"},
+    "doubao":      {"base_url": "https://ark.cn-beijing.volces.com/api/v3", "default_model": "doubao-pro-32k"},
+    "qwen":        {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "default_model": "qwen-plus"},
+}
 
 
 class AIEngine:
@@ -13,22 +23,23 @@ class AIEngine:
         self.model = model
         self.provider = os.getenv("AI_PROVIDER", "openai")
         self.client = httpx.Client(timeout=60)
+        self._base_url = PROVIDER_CONFIG.get(self.provider, {}).get("base_url", "")
 
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
         """调用大模型API"""
         if not self.api_key:
             return self._mock_llm(system_prompt + " " + user_prompt)
 
-        if self.provider == "openai":
-            return self._call_openai(system_prompt, user_prompt)
-        elif self.provider == "claude":
+        if self.provider == "claude":
             return self._call_claude(system_prompt, user_prompt)
         else:
-            return self._mock_llm(user_prompt)
+            # OpenAI / DeepSeek / Kimi / Doubao / Qwen 都兼容 OpenAI 格式
+            return self._call_openai_compat(system_prompt, user_prompt)
 
-    def _call_openai(self, system: str, user: str) -> str:
+    def _call_openai_compat(self, system: str, user: str) -> str:
+        """通用 OpenAI 兼容端点"""
         resp = self.client.post(
-            "https://api.openai.com/v1/chat/completions",
+            f"{self._base_url}/chat/completions",
             headers={"Authorization": f"Bearer {self.api_key}"},
             json={
                 "model": self.model,
@@ -39,8 +50,7 @@ class AIEngine:
                 "temperature": 0.7,
             },
         )
-        data = resp.json()
-        return data["choices"][0]["message"]["content"]
+        return resp.json()["choices"][0]["message"]["content"]
 
     def _call_claude(self, system: str, user: str) -> str:
         resp = self.client.post(
@@ -86,7 +96,6 @@ class AIEngine:
 返回JSON: {"titles": ["标题1", "标题2", "标题3"], "keywords": ["关键词1", "关键词2", ...]}"""
 
     def generate_titles(self, product_info: Dict, platform: str = "通用") -> Dict:
-        """AI生成商品标题"""
         user = f"平台: {platform}\n商品信息: {json.dumps(product_info, ensure_ascii=False)}"
         try:
             raw = self._call_llm(self.TITLE_SYSTEM, user)
@@ -111,7 +120,6 @@ class AIEngine:
 返回JSON: {"desc": "优化后的描述", "selling_points": ["卖点1", "卖点2"]}"""
 
     def optimize_description(self, title: str, desc: str, attrs: dict = None) -> Dict:
-        """AI优化商品描述"""
         user = f"标题: {title}\n原始描述: {desc}\n属性: {json.dumps(attrs or {}, ensure_ascii=False)}"
         try:
             raw = self._call_llm(self.DESC_SYSTEM, user)
@@ -123,7 +131,6 @@ class AIEngine:
     # ===== 关键词提取 =====
 
     def extract_keywords(self, title: str, desc: str) -> List[str]:
-        """从商品信息提取热搜关键词"""
         user = f"标题: {title}\n描述: {desc}\n请提取10个最相关的电商搜索关键词，每行一个。"
         try:
             raw = self._call_llm("你是SEO专家。只返回关键词，每行一个，不要序号。", user)
@@ -135,7 +142,6 @@ class AIEngine:
 
     def _mock_llm(self, prompt: str) -> str:
         """离线模式 — 基于规则返回合理结果"""
-        # check in specific order to avoid false matches
         if "合规审核" in prompt or "risk_score" in prompt:
             return json.dumps({"safe": True, "issues": [], "risk_score": 10, "suggestions": []}, ensure_ascii=False)
         if "优化商品描述" in prompt or "详情页专家" in prompt:
@@ -148,7 +154,6 @@ class AIEngine:
                 "titles": [f"{name} 品质保障 现货速发", f"热卖🔥{name} 限时特惠", f"{name}"],
                 "keywords": ["现货", "品质", "热卖", "厂家直供"],
             }, ensure_ascii=False)
-        # keywords: just return list
         return "现货\n批发\n厂家直供\n品质保证\n热卖"
 
 

@@ -71,21 +71,46 @@ export default function Settings() {
   const providers = [
     { value: 'openai', label: 'OpenAI (GPT-4/3.5)' },
     { value: 'claude', label: 'Anthropic Claude 3.5' },
+    { value: 'deepseek', label: 'DeepSeek 深度求索' },
+    { value: 'kimi', label: 'Kimi 月之暗面' },
+    { value: 'doubao', label: '豆包 字节跳动' },
+    { value: 'qwen', label: '通义千问 阿里云' },
   ];
 
-  const openaiModels = [
-    { value: 'gpt-4', label: 'GPT-4' },
-    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-    { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (快速便宜)' },
-  ];
+  const modelMap = {
+    openai: [
+      { value: 'gpt-4', label: 'GPT-4' },
+      { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+      { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (快速便宜)' },
+    ],
+    claude: [
+      { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+      { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus (最强)' },
+      { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku (最快便宜)' },
+    ],
+    deepseek: [
+      { value: 'deepseek-chat', label: 'DeepSeek-Chat (通用)' },
+      { value: 'deepseek-reasoner', label: 'DeepSeek-R1 (推理增强)' },
+    ],
+    kimi: [
+      { value: 'moonshot-v1-8k', label: 'Moonshot v1 8K' },
+      { value: 'moonshot-v1-32k', label: 'Moonshot v1 32K (长上下文)' },
+      { value: 'moonshot-v1-128k', label: 'Moonshot v1 128K (超长)' },
+    ],
+    doubao: [
+      { value: 'doubao-pro-32k', label: '豆包 Pro 32K' },
+      { value: 'doubao-lite-32k', label: '豆包 Lite 32K (轻量)' },
+      { value: 'doubao-pro-128k', label: '豆包 Pro 128K (长文本)' },
+    ],
+    qwen: [
+      { value: 'qwen-plus', label: '通义千问 Plus' },
+      { value: 'qwen-turbo', label: '通义千问 Turbo (快速)' },
+      { value: 'qwen-max', label: '通义千问 Max (最强)' },
+      { value: 'qwen-long', label: '通义千问 Long (长文档)' },
+    ],
+  };
 
-  const claudeModels = [
-    { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
-    { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus (最强)' },
-    { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku (最快便宜)' },
-  ];
-
-  const modelOptions = config?.provider === 'claude' ? claudeModels : openaiModels;
+  const modelOptions = modelMap[config?.provider] || modelMap.openai;
 
   return (
     <div>
@@ -179,6 +204,30 @@ export default function Settings() {
               <Tag color="purple">Claude</Tag>
               <a href="https://console.anthropic.com/keys" target="_blank" rel="noreferrer">
                 https://console.anthropic.com/keys
+              </a>
+            </div>
+            <div>
+              <Tag color="blue">DeepSeek</Tag>
+              <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">
+                https://platform.deepseek.com/api_keys
+              </a>
+            </div>
+            <div>
+              <Tag color="orange">Kimi</Tag>
+              <a href="https://platform.moonshot.cn/console/api-keys" target="_blank" rel="noreferrer">
+                https://platform.moonshot.cn/console/api-keys
+              </a>
+            </div>
+            <div>
+              <Tag color="magenta">豆包</Tag>
+              <a href="https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey" target="_blank" rel="noreferrer">
+                火山引擎 Ark 控制台
+              </a>
+            </div>
+            <div>
+              <Tag color="cyan">通义千问</Tag>
+              <a href="https://dashscope.console.aliyun.com/apiKey" target="_blank" rel="noreferrer">
+                https://dashscope.console.aliyun.com/apiKey
               </a>
             </div>
           </Space>

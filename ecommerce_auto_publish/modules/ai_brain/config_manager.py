@@ -24,10 +24,13 @@ class AIConfigManager:
             "api_key": "",
             "model": "gpt-4",
             "enabled": False,
-            # Claude settings
-            "claude_model": "claude-3-5-sonnet-20241022",
-            # OpenAI settings
+            # per-provider default models
             "openai_model": "gpt-4",
+            "claude_model": "claude-3-5-sonnet-20241022",
+            "deepseek_model": "deepseek-chat",
+            "kimi_model": "moonshot-v1-8k",
+            "doubao_model": "doubao-pro-32k",
+            "qwen_model": "qwen-plus",
             "temperature": 0.7,
             "max_tokens": 2048,
         }
@@ -56,15 +59,21 @@ class AIConfigManager:
         return {"ok": True, "msg": "API Key已保存", "enabled": self._config["enabled"]}
 
     def set_provider(self, provider: str) -> Dict:
-        valid = ["openai", "claude"]
+        valid = ["openai", "claude", "deepseek", "kimi", "doubao", "qwen"]
         if provider not in valid:
             return {"ok": False, "msg": f"无效提供商，可选: {valid}"}
         self._config["provider"] = provider
-        # Auto-select model based on provider
-        if provider == "claude":
-            self._config["model"] = self._config["claude_model"]
+        # Auto-select default model for this provider
+        model_key = f"{provider}_model"
+        if model_key in self._config and self._config[model_key]:
+            self._config["model"] = self._config[model_key]
         else:
-            self._config["model"] = self._config["openai_model"]
+            # Fallback to PROVIDER_CONFIG defaults
+            from .engine import PROVIDER_CONFIG
+            default_model = PROVIDER_CONFIG.get(provider, {}).get("default_model", "gpt-4")
+            self._config["model"] = default_model
+            self._config[model_key] = default_model
+            print(f"[AIConfig] Initialised {model_key}={default_model}")
         self._save()
         self._reload_engine()
         return {"ok": True, "msg": f"已切换到 {provider.upper()}", "provider": provider, "model": self._config["model"]}
