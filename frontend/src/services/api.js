@@ -56,6 +56,17 @@ export const crawlProduct = (url) => api.post('/product/crawl', { source_url: ur
 export const createProduct = (data) => api.post('/product/manual/create', data);
 export const getProductList = (skip = 0, limit = 20) => api.get('/product/master/list', { params: { skip, limit } });
 export const getProductDetail = (id) => api.get(`/product/master/${id}`);
+export const searchProducts = (q, status, skip = 0, limit = 50) =>
+  api.get('/product/search', { params: { q, status, skip, limit } });
+export const importCsv = (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return api.post('/product/import/csv', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+};
+export const exportCsv = (status) =>
+  api.get('/product/export/csv', { params: { status }, responseType: 'blob' });
 
 // 调度
 export const dispatchProduct = (masterId, platforms) =>

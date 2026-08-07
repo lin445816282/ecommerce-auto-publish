@@ -1,6 +1,9 @@
 """全平台AI自动上架系统 — FastAPI入口 v0.7.0 (JWT Auth)"""
+import csv
+import io
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
@@ -281,6 +284,189 @@ async def product_detail(pid: int, db: Session = Depends(get_db)):
         "images": master.main_images, "attrs": master.attrs_json,
         "status": master.status, "version": master.version,
     }}
+
+
+# --- 批量CSV导入 ---
+
+CSV_COLUMN_MAP = {
+    "sku": "inner_sku", "商品编码": "inner_sku", "inner_sku": "inner_sku",
+    "title": "title", "标题": "title", "商品名称": "title",
+    "price": "price", "售价": "price", "价格": "price",
+    "cost_price": "cost_price", "成本": "cost_price", "成本价": "cost_price",
+    "stock": "stock", "库存": "stock",
+    "desc": "desc", "描述": "desc", "详情": "desc",
+}
+
+
+@app.post("/api/product/import/csv", tags=["产品源"])
+async def import_csv(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """批量导入CSV商品"""
+    if not file.filename or not file.filename.endswith('.csv'):
+        raise HTTPException(400, "请上传.csv文件")
+
+    content = await file.read()
+    try:
+        text = content.decode("utf-8-sig")  # handle BOM
+    except UnicodeDecodeError:
+        text = content.decode("gbk", errors="replace")
+
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        raise HTTPException(400, "CSV为空或无标题行")
+
+    # Auto-detect column mapping
+    mapping = {}
+    for col in reader.fieldnames:
+        col_clean = col.strip()
+        field = CSV_COLUMN_MAP.get(col_clean, CSV_COLUMN_MAP.get(col_clean.lower(), None))
+        if field:
+            mapping[col] = field
+
+    imported, skipped, errors = 0, 0, []
+    seen_skus = set()  # track SKUs within this batch (not yet committed)
+    for row_idx, row in enumerate(reader, start=1):
+        data = {}
+        for csv_col, db_field in mapping.items():
+            val = row.get(csv_col, "").strip()
+            if val:
+                data[db_field] = val
+
+        sku = data.get("inner_sku", "")
+        title = data.get("title", "")
+        price_str = data.get("price", "0")
+
+        if not title:
+            skipped += 1
+            errors.append({"row": row_idx, "error": "缺少标题"})
+            continue
+
+        if not sku:
+            sku = f"IMP-{int(datetime.utcnow().timestamp())}-{row_idx}"
+            data["inner_sku"] = sku
+
+        # Check duplicate SKU (both in-DB and in-batch)
+        if sku in seen_skus:
+            skipped += 1
+            errors.append({"row": row_idx, "sku": sku, "error": "SKU重复(同批次)"})
+            continue
+
+        existing = db.query(ProductMaster).filter(ProductMaster.inner_sku == sku).first()
+        if existing:
+            skipped += 1
+            errors.append({"row": row_idx, "sku": sku, "error": "SKU重复"})
+            continue
+
+        seen_skus.add(sku)
+
+        try:
+            price = float(price_str) if price_str else 0.0
+            cost_price = float(data.get("cost_price", 0)) if data.get("cost_price") else 0.0
+            stock = int(data.get("stock", 0)) if data.get("stock") else 0
+
+            master = ProductMaster(
+                inner_sku=sku,
+                title=title,
+                desc=data.get("desc", ""),
+                price=price,
+                cost_price=cost_price,
+                stock=stock,
+                source_type="csv_import",
+                status=0,
+            )
+            db.add(master)
+            imported += 1
+        except (ValueError, TypeError) as e:
+            skipped += 1
+            errors.append({"row": row_idx, "sku": sku, "error": str(e)})
+
+    db.commit()
+
+    return {
+        "code": 0,
+        "data": {
+            "imported": imported,
+            "skipped": skipped,
+            "total": imported + skipped,
+            "errors": errors[:20],  # cap error list
+        },
+    }
+
+
+# --- 全文搜索 ---
+
+@app.get("/api/product/search", tags=["产品源"])
+async def search_products(
+    q: str = "",
+    status: Optional[int] = None,
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    """全文搜索商品（标题+SKU）"""
+    query = db.query(ProductMaster)
+    if q:
+        pattern = f"%{q}%"
+        query = query.filter(
+            ProductMaster.title.like(pattern) | ProductMaster.inner_sku.like(pattern)
+        )
+    if status is not None:
+        query = query.filter(ProductMaster.status == status)
+
+    total = query.count()
+    items = query.order_by(ProductMaster.id.desc()).offset(skip).limit(limit).all()
+
+    return {
+        "code": 0,
+        "data": {
+            "total": total,
+            "items": [
+                {"id": i.id, "inner_sku": i.inner_sku, "title": i.title,
+                 "price": i.price, "stock": i.stock, "status": i.status,
+                 "source_type": i.source_type, "create_time": i.create_time.isoformat() if i.create_time else None}
+                for i in items
+            ],
+        },
+    }
+
+
+# --- CSV导出 ---
+
+@app.get("/api/product/export/csv", tags=["产品源"])
+async def export_csv(
+    status: Optional[int] = None,
+    platform: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """导出商品为CSV"""
+    query = db.query(ProductMaster)
+    if status is not None:
+        query = query.filter(ProductMaster.status == status)
+
+    items = query.order_by(ProductMaster.id).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["ID", "SKU", "标题", "售价", "成本价", "库存", "状态", "来源", "创建时间"])
+
+    STATUS_LABELS_MAP = {0: "草稿", 1: "待审核", 2: "已生成草稿", 3: "部分上架", 4: "全部上架", 5: "作废"}
+
+    for item in items:
+        writer.writerow([
+            item.id, item.inner_sku, item.title, item.price, item.cost_price,
+            item.stock, STATUS_LABELS_MAP.get(item.status, str(item.status)),
+            item.source_type, item.create_time.isoformat() if item.create_time else "",
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=products_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"},
+    )
 
 
 # ============ 调度核心模块 ============
