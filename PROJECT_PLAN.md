@@ -1,10 +1,10 @@
 # 全平台AI自动上架系统 — 项目执行计划
 
-## 项目状态：🟢 v0.7.0 全部完成
+## 项目状态：🟢 v0.8.0 全部完成
 **项目经理**：AI（小林辅助决策）  
 **开始日期**：2026-08-06  
 **仓库**：[github.com/lin445816282/ecommerce-auto-publish](https://github.com/lin445816282/ecommerce-auto-publish)  
-**提交数**：14 commits
+**提交数**：17 commits
 
 ---
 
@@ -32,6 +32,9 @@
 | P3-4 | 三道闸全链路验证 | ✅ 文字/价格/图片闸全部通过测试 |
 | P3-5 | FastAPI现代化 (lifespan) | ✅ 移除on_event废弃API |
 | P3-6 | 启动入口+端口修正 | ✅ uvicorn.run + 端口8800 |
+| P3-7 | JWT认证系统 | ✅ login/register/refresh/me + bcrypt |
+| P3-8 | 批量CSV导入 | ✅ 自动字段映射 + 同批次重复检测 |
+| P3-9 | 全文搜索+CSV导出 | ✅ 标题/SKU搜索 + 状态筛选导出 |
 
 ---
 
@@ -165,6 +168,35 @@ docker compose up -d --build
 5. 🖼️ **图片处理** — 上传→抠图→水印→平台优化
 6. ✅ **审核发布** — 待审核列表+发布
 7. ⚙️ **系统设置** — 6家AI模型配置 (37个模型可选)
+
+---
+
+## v0.8.0 批量运营工具 (2026-08-07)
+
+### 批量CSV导入
+- **端点**: `POST /api/product/import/csv` (需认证)
+- **字段映射**: 自动识别中英文表头 (title/标题, price/售价, sku/SKU...)
+- **编码兼容**: UTF-8 BOM / UTF-8 / GBK 自动检测
+- **去重**: 同批次seen_skus集合 + 数据库已有SKU检测
+- **容错**: 缺失标题跳过, 价格格式错误跳过, 行级独立
+- **返回**: `{imported, skipped, errors[{row, sku, error}]}`
+
+### 全文搜索
+- **端点**: `GET /api/product/search?q=&status=&skip=&limit=`
+- **范围**: 标题 + SKU LIKE匹配
+- **筛选**: 按status精确过滤
+- **分页**: skip/limit, 返回 `{total, items[]}`
+
+### CSV导出
+- **端点**: `GET /api/product/export/csv?status=`
+- **格式**: UTF-8 CSV (ID/SKU/标题/售价/成本/库存/状态/来源/时间)
+- **下载**: StreamingResponse + Content-Disposition
+
+### 前端改造
+- 搜索栏: 400ms防抖实时搜索
+- 批量导入: Upload组件 + 结果反馈(成功/跳过/错误)
+- 导出按钮: blob触发浏览器下载
+- 表格: 新增SKU列+来源列(手动/1688/CSV导入)+库存列
 
 ## 全链路流水线验证
 
