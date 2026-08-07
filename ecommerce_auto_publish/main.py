@@ -1,6 +1,7 @@
-"""全平台AI自动上架系统 — FastAPI入口 v0.2.0"""
+"""全平台AI自动上架系统 — FastAPI入口 v0.3.0"""
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
@@ -13,11 +14,12 @@ from modules.product_source.crawler import product_importer
 from modules.product_master.manager import product_manager as pm_mgr
 from modules.scheduler_core.task_dispatcher import dispatcher
 from modules.export_gate.publisher import publish_gate, PublishPermission
+from modules.ai_brain.engine import ai_engine
 
 app = FastAPI(
     title="全平台AI自动上架系统",
     description="支持淘宝/天猫/抖店/拼多多/亚马逊的多平台AI自动上架",
-    version="0.2.0",
+    version="0.3.0",
 )
 
 # CORS
@@ -216,6 +218,58 @@ async def dispatch_product(master_id: int, platforms: str = "taobao,douyin", db:
     return {"code": 0, "data": result}
 
 
+# ============ AI决策层 ============
+
+class AIAuditRequest(BaseModel):
+    title: str
+    desc: str = ""
+    attrs: dict = {}
+
+
+class AITitleRequest(BaseModel):
+    product_info: dict
+    platform: str = "通用"
+
+
+class AIDescRequest(BaseModel):
+    title: str
+    desc: str = ""
+    attrs: dict = {}
+
+
+class AIKeywordsRequest(BaseModel):
+    title: str
+    desc: str = ""
+
+
+@app.post("/api/ai/audit", tags=["AI决策"])
+async def ai_audit(req: AIAuditRequest):
+    """AI智能审核商品"""
+    result = ai_engine.audit_product(req.title, req.desc, req.attrs)
+    return {"code": 0, "data": result}
+
+
+@app.post("/api/ai/gen_title", tags=["AI决策"])
+async def ai_gen_title(req: AITitleRequest):
+    """AI生成商品标题（返回3个版本）"""
+    result = ai_engine.generate_titles(req.product_info, req.platform)
+    return {"code": 0, "data": result}
+
+
+@app.post("/api/ai/optimize_desc", tags=["AI决策"])
+async def ai_optimize_desc(req: AIDescRequest):
+    """AI优化商品描述"""
+    result = ai_engine.optimize_description(req.title, req.desc, req.attrs)
+    return {"code": 0, "data": result}
+
+
+@app.post("/api/ai/keywords", tags=["AI决策"])
+async def ai_extract_keywords(req: AIKeywordsRequest):
+    """AI提取热搜关键词"""
+    keywords = ai_engine.extract_keywords(req.title, req.desc)
+    return {"code": 0, "data": {"keywords": keywords}}
+
+
 # ============ 出口（审核发布） ============
 
 @app.get("/api/audit/pending/list", tags=["审核"])
@@ -294,7 +348,7 @@ async def publish_status(draft_id: str):
 @app.on_event("startup")
 async def startup():
     print("=" * 50)
-    print("  全平台AI自动上架系统 v0.2.0")
+    print("  全平台AI自动上架系统 v0.3.0")
     print("  六层架构 · FastAPI后端")
     print("=" * 50)
     try:
@@ -309,7 +363,7 @@ async def startup():
 async def root():
     return {
         "name": "全平台AI自动上架系统",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "status": "running",
         "docs": "/docs",
     }

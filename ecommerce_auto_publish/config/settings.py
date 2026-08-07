@@ -1,11 +1,20 @@
 """全局配置"""
 import os
 
-# 数据库
-DATABASE_URL = os.getenv("DB_URL", "mysql+pymysql://root:123456@localhost:3306/ecommerce")
+# 数据库 — 开发模式自动切换SQLite
+DB_URL = os.getenv("DB_URL", "")
+if DB_URL:
+    DATABASE_URL = DB_URL
+else:
+    DB_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+    os.makedirs(DB_DIR, exist_ok=True)
+    DATABASE_URL = f"sqlite:///{os.path.join(DB_DIR, 'ecommerce.db')}"
 
-# Redis
+# Redis — 开发模式可选
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+# 环境
+ENV = os.getenv("ENV", "dev")
 
 # API密钥（加密存储）
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-in-production")

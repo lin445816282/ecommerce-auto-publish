@@ -1,48 +1,39 @@
-"""数据库 & Redis 连接管理"""
+"""数据库 & Redis 连接管理 — 自动适配SQLite/MySQL"""
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from config.settings import DATABASE_URL, REDIS_URL
 
-engine = None
-SessionLocal = None
+# 检测数据库类型
+IS_SQLITE = "sqlite" in DATABASE_URL
+
+if IS_SQLITE:
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=20)
+
+SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+# Redis（可选用）
 redis_client = None
-
-def _get_engine():
-    global engine, SessionLocal
-    if engine is None:
-        engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=20)
-        SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-    return engine
-
-def _get_redis():
-    global redis_client
-    if redis_client is None:
-        try:
-            import redis
-            redis_client = redis.from_url(REDIS_URL, decode_responses=True)
-        except Exception:
-            print("[Redis] 未连接(开发模式)")
-    return redis_client
+try:
+    import redis
+    redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+    redis_client.ping()
+    print("[Redis] Connected.")
+except Exception:
+    print("[Redis] Not available (dev mode).")
 
 def get_db():
-    """FastAPI依赖注入"""
-    db = SessionLocal() if SessionLocal else None
-    if db is None:
-        _get_engine()
-        db = SessionLocal()
+    db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
 def init_db():
-    """建表"""
-    try:
-        from db.models import Base
-        engine = _get_engine()
-        Base.metadata.create_all(bind=engine)
-        print("[DB] All tables created.")
-        return True
-    except Exception as e:
-        print(f"[DB] 数据库不可用(开发模式): {e}")
-        return False
+    from db.models import Base
+    Base.metadata.create_all(bind=engine)
+    print("[DB] Tables created.")
+
+print(f"[DB] Engaged: {'SQLite' if IS_SQLITE else 'MySQL'}")

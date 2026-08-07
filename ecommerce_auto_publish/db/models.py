@@ -1,5 +1,5 @@
 """SQLAlchemy ORM 数据模型 — 商品主表 + 平台映射 + 任务调度 + 审核记录 + 平台配置"""
-from sqlalchemy import Column, BigInteger, String, Text, Integer, Float, JSON, DateTime, ForeignKey, SmallInteger
+from sqlalchemy import Column, String, Text, Integer, Float, JSON, DateTime, ForeignKey, SmallInteger
 from sqlalchemy.orm import declarative_base, relationship
 from datetime import datetime
 
@@ -10,7 +10,7 @@ class ProductMaster(Base):
     """商品主表 — 全链路主键"""
     __tablename__ = "product_master"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment="全局商品ID")
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="全局商品ID")
     inner_sku = Column(String(100), unique=True, nullable=False, comment="内部SKU编号")
     title = Column(String(500), default="", comment="通用标题")
     desc = Column(Text, default="", comment="通用详情")
@@ -35,8 +35,8 @@ class ProductPlatformRel(Base):
     """平台商品映射表"""
     __tablename__ = "product_platform_rel"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    master_id = Column(BigInteger, ForeignKey("product_master.id"), nullable=False)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    master_id = Column(Integer, ForeignKey("product_master.id"), nullable=False)
     platform = Column(String(32), nullable=False, comment="taobao/douyin/pdd/amazon")
     shop_id = Column(String(64), default="", comment="店铺ID")
     platform_item_id = Column(String(64), nullable=True, comment="平台返回商品ID")
@@ -53,9 +53,9 @@ class TaskJob(Base):
     """任务调度表"""
     __tablename__ = "task_job"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     job_type = Column(String(32), nullable=False, comment="crawl/image_process/adapt/publish")
-    master_id = Column(BigInteger, nullable=True, comment="商品ID，null为批量任务")
+    master_id = Column(Integer, nullable=True, comment="商品ID，null为批量任务")
     platform = Column(String(32), default="", comment="目标平台")
     job_status = Column(SmallInteger, default=0, comment="0待执行 1执行中 2成功 3失败")
     retry_count = Column(Integer, default=0, comment="已重试次数")
@@ -70,8 +70,8 @@ class AuditRecord(Base):
     """审核记录表"""
     __tablename__ = "audit_record"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    master_id = Column(BigInteger, nullable=False)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    master_id = Column(Integer, nullable=False)
     platform = Column(String(32), default="")
     audit_type = Column(String(16), default="auto_ai", comment="auto_ai/manual")
     audit_result = Column(SmallInteger, default=0, comment="0待审核 1通过 2拒绝")
@@ -84,7 +84,7 @@ class PlatformConfig(Base):
     """平台配置表 — 类目映射/属性映射/店铺授权"""
     __tablename__ = "platform_config"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     platform = Column(String(32), nullable=False)
     shop_id = Column(String(64), default="")
     config_key = Column(String(64), nullable=False, comment="category_map/attr_map/api_auth")
