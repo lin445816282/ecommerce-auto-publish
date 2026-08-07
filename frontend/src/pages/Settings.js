@@ -94,7 +94,9 @@ export default function Settings() {
       { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus (深度)' },
     ],
     deepseek: [
-      { value: 'deepseek-chat', label: 'DeepSeek-V3 ⭐ 最新 (671B MoE)' },
+      { value: 'deepseek-chat', label: 'DeepSeek-V3 (671B MoE)' },
+      { value: 'deepseek-v4-pro', label: 'DeepSeek-V4 Pro ⭐ 最新旗舰 (2025.12)' },
+      { value: 'deepseek-v4-flash', label: 'DeepSeek-V4 Flash (极速便宜)' },
       { value: 'deepseek-reasoner', label: 'DeepSeek-R1 (深度推理)' },
     ],
     kimi: [
@@ -137,7 +139,7 @@ export default function Settings() {
             style={{ marginBottom: 16 }}
           />
 
-          <Form form={form} layout="vertical">
+          <Form form={form} layout="vertical" onFinish={handleSaveKey}>
             <Form.Item label="API Key" name="api_key">
               <Input.Password
                 prefix={<KeyOutlined />}
