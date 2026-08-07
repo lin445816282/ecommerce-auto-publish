@@ -1,9 +1,10 @@
 # 全平台AI自动上架系统 — 项目执行计划
 
-## 项目状态：🟢 v0.5.0 6家AI模型 + AI图片处理 + 7页面管理后台
-**项目经理**：AI（小林辅助决策）
-**开始日期**：2026-08-06
-**仓库**：[github.com/lin445816282/ecommerce-auto-publish](https://github.com/lin445816282/ecommerce-auto-publish)
+## 项目状态：🟢 v0.5.0 全部完成
+**项目经理**：AI（小林辅助决策）  
+**开始日期**：2026-08-06  
+**仓库**：[github.com/lin445816282/ecommerce-auto-publish](https://github.com/lin445816282/ecommerce-auto-publish)  
+**提交数**：14 commits
 
 ---
 
@@ -13,23 +14,24 @@
 |------|------|------|
 | P0-1 | 项目骨架 + 六层架构 | ✅ |
 | P0-2 | 产品源（1688爬虫+录入） | ✅ HTTP真实抓取+解析 |
-| P0-3 | 调度核心（三道闸+分发） | ✅ |
+| P0-3 | 调度核心（三道闸+分发） | ✅ 文字闸/价格闸/图片闸 |
 | P0-4 | 主表管理（CRUD+版本回滚） | ✅ |
 | P0-5 | 平台适配器（淘宝+抖店） | ✅ |
 | P0-6 | 全链路流水线引擎 | ✅ 一键执行 |
-| P0-7 | 拼多多+亚马逊适配器 | ✅ 4平台已完成 |
+| P0-7 | 拼多多+亚马逊适配器 | ✅ 4平台全部通过 |
 | P1-1 | 出口门（草稿/审核/发布） | ✅ 5级权限 |
 | P1-2 | AI决策层（审核/标题/描述） | ✅ Mock模式 |
-| P1-3 | React管理后台 | ✅ 5页面 |
-| P2-1 | 接入真实大模型API (6家) | ✅ DeepSeek/Kimi/豆包/Qwen/OpenAI/Claude |
-| P2-2 | AI图片处理（抠图/水印） | ✅ Pillow边缘检测+平台优化 |
-| P2-3 | 前端图片上传 | ✅ 拖拽上传+处理预览 |
-| P2-4 | Docker部署 | ⬜ |
+| P1-3 | React管理后台 | ✅ |
+| P2-1 | 接入真实大模型API | ✅ 6家37模型 (GPT-4.1/Claude4/DeepSeek-V4/Kimi/Qwen3/豆包) |
+| P2-2 | AI图片处理（抠图/水印） | ✅ Pillow+rembg |
+| P2-3 | 前端图片上传+处理 | ✅ 拖拽上传+预览+优化 |
+| P2-4 | Docker一键部署 | ✅ Dockerfile+docker-compose+nginx |
 
 ---
 
 ## 运行方式
 
+### 开发模式
 ```bash
 # 后端 (端口8800)
 cd ecommerce_auto_publish
@@ -37,16 +39,54 @@ python -B -m uvicorn main:app --host 0.0.0.0 --port 8800
 
 # 前端 (端口3001)
 cd frontend
-PORT=3001 npm start
+npm start
+```
+
+### Docker 部署
+```bash
+cd D:\ecom
+# 如果 Docker Desktop 有国内镜像报错，先清理 daemon.json 的 registry-mirrors
+docker compose up -d --build
+# 访问 http://localhost （前端+API一体化，nginx反向代理）
+```
+
+---
+
+## 系统架构
+
+```
+┌──────────┐  ┌──────────┐
+│ React UI │  │ FastAPI  │
+│  :3001   │  │  :8800   │
+└────┬─────┘  └────┬─────┘
+     │             │
+     ▼             ▼
+┌──────────────────────────────────────┐
+│          六层架构                     │
+│  product_source → product_master     │
+│       → scheduler_core               │
+│       → adapter_layer (4平台)        │
+│       → export_gate (审核+发布)      │
+│       → ai_brain (6家LLM+图片处理)   │
+└──────────────────────────────────────┘
 ```
 
 ## 当前运行状态
 
-| 服务 | 地址 | 状态 |
+| 服务 | 地址 | 端点 |
 |------|------|------|
-| FastAPI后端 | http://localhost:8800 | 🟢 |
-| API文档 | http://localhost:8800/docs | 🟢 23个端点 |
-| React前端 | http://localhost:3001 | 🟢 |
+| FastAPI后端 | http://localhost:8800 | 31个 |
+| API文档 | http://localhost:8800/docs | Swagger |
+| React前端 | http://localhost:3001 | 7页面 |
+
+### 7个管理页面
+1. 📊 **工作台** — 实时统计 + 流水线历史
+2. 📦 **商品管理** — CRUD + 状态筛选 + 详情抽屉 + 一键发布
+3. ⚡ **调度分发** — 流水线执行
+4. 🤖 **AI工具** — 审核/标题/描述/关键词
+5. 🖼️ **图片处理** — 上传→抠图→水印→平台优化
+6. ✅ **审核发布** — 待审核列表+发布
+7. ⚙️ **系统设置** — 6家AI模型配置 (37个模型可选)
 
 ## 全链路流水线验证
 
@@ -55,4 +95,5 @@ PORT=3001 npm start
                 ↓ 文字违禁→作废
                 ↓ 价格异常→待审核
                 ↓ 全部通过→4平台同时发布
+       ✅ total:4  passed:4  published:4  stage:complete
 ```
