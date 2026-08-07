@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Table, Button, Modal, Form, Input, InputNumber, Space, Tag, message,
-  Select, Drawer, Descriptions, Upload, Tooltip, Progress, Typography,
+  Select, Drawer, Descriptions, Upload, Tooltip, Typography, Popconfirm,
 } from 'antd';
 import {
   PlusOutlined, CloudDownloadOutlined, ThunderboltOutlined, EyeOutlined,
   ReloadOutlined, SearchOutlined, UploadOutlined, DownloadOutlined,
-  FileExcelOutlined,
+  FileExcelOutlined, EditOutlined, DeleteOutlined, RocketOutlined,
 } from '@ant-design/icons';
-import { getProductDetail, createProduct, crawlProduct, runPipeline, searchProducts, importCsv, exportCsv } from '../services/api';
+import {
+  getProductDetail, createProduct, crawlProduct, runPipeline,
+  searchProducts, importCsv, exportCsv, updateProduct, deleteProduct, batchPublish,
+} from '../services/api';
 
 const { Text } = Typography;
 
@@ -33,8 +36,19 @@ export default function ProductManager() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editData, setEditData] = useState(null);
+  const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+  const [batchPubOpen, setBatchPubOpen] = useState(false);
+  const [batchPublishing, setBatchPublishing] = useState(false);
   const timerRef = useRef(null);
   const [form] = Form.useForm();
+  const [editForm] = Form.useForm();
+
+  // Get user role from localStorage
+  const userRole = (() => {
+    try { return JSON.parse(localStorage.getItem('user') || '{}').role || 'operator'; } catch { return 'operator'; }
+  })();
 
   // Load with search + status filter
   const loadProducts = useCallback(async (q = searchText, status = statusFilter, p = page) => {
@@ -151,6 +165,56 @@ export default function ProductManager() {
     setExporting(false);
   };
 
+  // --- Edit product ---
+  const handleEdit = async (id) => {
+    try {
+      const res = await getProductDetail(id);
+      const p = res.data.data;
+      setEditData(p);
+      editForm.setFieldsValue({
+        title: p.title, price: p.price, cost_price: p.cost_price,
+        stock: p.stock, desc: p.desc,
+      });
+      setEditOpen(true);
+    } catch (e) { message.error('获取详情失败'); }
+  };
+
+  const handleEditSubmit = async (values) => {
+    if (!editData) return;
+    try {
+      await updateProduct(editData.id, values);
+      message.success('更新成功');
+      setEditOpen(false);
+      loadProducts();
+    } catch (e) { message.error('更新失败: ' + (e.response?.data?.detail || e.message)); }
+  };
+
+  // --- Delete product ---
+  const handleDelete = async (id) => {
+    try {
+      await deleteProduct(id);
+      message.success('已删除');
+      loadProducts();
+    } catch (e) { message.error('删除失败: ' + (e.response?.data?.detail || e.message)); }
+  };
+
+  // --- Batch publish ---
+  const handleBatchPublish = async () => {
+    if (selectedRowKeys.length === 0) return message.warning('请先选择商品');
+    setBatchPublishing(true);
+    try {
+      const res = await batchPublish(selectedRowKeys);
+      const data = res.data.data;
+      const ok = data.results.filter(r => r.published > 0).length;
+      const fail = data.results.length - ok;
+      message.success('批量发布完成: ' + ok + ' 成功' + (fail > 0 ? ', ' + fail + ' 失败' : ''));
+      setBatchPubOpen(false);
+      setSelectedRowKeys([]);
+      loadProducts();
+    } catch (e) { message.error('批量发布失败: ' + (e.response?.data?.detail || e.message)); }
+    setBatchPublishing(false);
+  };
+
   const columns = [
     { title: 'ID', dataIndex: 'id', width: 50, sorter: (a, b) => a.id - b.id },
     { title: 'SKU', dataIndex: 'inner_sku', width: 140, ellipsis: true },
@@ -161,13 +225,20 @@ export default function ProductManager() {
     { title: '状态', dataIndex: 'status', width: 90,
       render: s => <Tag color={STATUS_COLOR[s]}>{STATUS_MAP[s] || s}</Tag> },
     { title: '来源', dataIndex: 'source_type', width: 80, render: s => s === 'manual' ? '手动' : s === '1688' ? '1688' : s === 'csv_import' ? 'CSV导入' : s },
-    { title: '操作', key: 'actions', width: 170, fixed: 'right',
+    { title: '操作', key: 'actions', width: 220, fixed: 'right',
       render: (_, r) => (
         <Space size="small">
-          <Button size="small" icon={<EyeOutlined />} onClick={() => showDetail(r.id)}>详情</Button>
+          <Button size="small" icon={<EyeOutlined />} onClick={() => showDetail(r.id)} />
+          <Button size="small" icon={<EditOutlined />} onClick={() => handleEdit(r.id)}
+            disabled={r.status === 5} />
           <Button size="small" type="primary" icon={<ThunderboltOutlined />}
             loading={publishing[r.id]} disabled={r.status === 5}
             onClick={() => handlePublish(r.id)}>发布</Button>
+          {userRole === 'admin' && (
+            <Popconfirm title="确认删除?" onConfirm={() => handleDelete(r.id)} okText="删除" cancelText="取消">
+              <Button size="small" danger icon={<DeleteOutlined />} />
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -204,6 +275,12 @@ export default function ProductManager() {
           </Button>
         </Upload>
         <Button icon={<DownloadOutlined />} onClick={handleExport} loading={exporting}>导出CSV</Button>
+        {selectedRowKeys.length > 0 && (
+          <Button type="primary" danger icon={<RocketOutlined />}
+            onClick={() => setBatchPubOpen(true)}>
+            批量发布({selectedRowKeys.length})
+          </Button>
+        )}
         <Button icon={<ReloadOutlined />} onClick={() => loadProducts()}>刷新</Button>
         <Tag color="blue">{total} 条</Tag>
       </Space>
@@ -230,7 +307,12 @@ export default function ProductManager() {
       <Table
         columns={columns} dataSource={products} rowKey="id"
         loading={loading} size="small"
-        scroll={{ x: 820 }}
+        rowSelection={{
+          selectedRowKeys,
+          onChange: setSelectedRowKeys,
+          getCheckboxProps: (r) => ({ disabled: r.status === 5 }),
+        }}
+        scroll={{ x: 900 }}
         pagination={{
           current: page, pageSize: PAGE_SIZE, total,
           onChange: setPage,
@@ -250,6 +332,30 @@ export default function ProductManager() {
           <Form.Item name="stock" label="库存"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="desc" label="描述"><Input.TextArea rows={3} /></Form.Item>
         </Form>
+      </Modal>
+
+      {/* Edit Modal */}
+      <Modal title="编辑商品" open={editOpen} onCancel={() => setEditOpen(false)}
+        onOk={() => editForm.submit()} destroyOnClose>
+        <Form form={editForm} layout="vertical" onFinish={handleEditSubmit}>
+          <Form.Item name="title" label="标题" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="price" label="售价" rules={[{ required: true }]}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item>
+          <Form.Item name="cost_price" label="成本价"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item>
+          <Form.Item name="stock" label="库存"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item>
+          <Form.Item name="desc" label="描述"><Input.TextArea rows={3} /></Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Batch Publish Modal */}
+      <Modal title="批量发布确认" open={batchPubOpen}
+        onCancel={() => setBatchPubOpen(false)}
+        onOk={handleBatchPublish}
+        confirmLoading={batchPublishing}
+        okText="确认发布" okType="primary"
+      >
+        <p>即将对 <Text strong>{selectedRowKeys.length}</Text> 个商品执行全平台发布</p>
+        <p style={{ color: '#888' }}>目标平台: 🍑淘宝 🎵抖音 📦拼多多 🌍亚马逊</p>
+        <p style={{ color: '#fa8c16' }}>注意：作废商品将自动跳过</p>
       </Modal>
 
       {/* Detail Drawer */}

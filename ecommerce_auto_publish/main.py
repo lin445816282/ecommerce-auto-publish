@@ -469,6 +469,136 @@ async def export_csv(
     )
 
 
+# --- 商品编辑 & 删除 ---
+
+class UpdateProductRequest(BaseModel):
+    title: Optional[str] = None
+    price: Optional[float] = None
+    cost_price: Optional[float] = None
+    stock: Optional[int] = None
+    desc: Optional[str] = None
+    main_images: Optional[list] = None
+    attrs_json: Optional[dict] = None
+
+
+@app.put("/api/product/master/{pid}", tags=["产品源"])
+async def update_product(
+    pid: int,
+    req: UpdateProductRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """更新商品信息（增量更新，仅传需修改的字段）"""
+    master = db.query(ProductMaster).filter(ProductMaster.id == pid).first()
+    if not master:
+        raise HTTPException(404, "商品不存在")
+
+    changed = False
+    fields = {
+        "title": req.title, "price": req.price, "cost_price": req.cost_price,
+        "stock": req.stock, "desc": req.desc,
+        "main_images": req.main_images, "attrs_json": req.attrs_json,
+    }
+    for field, value in fields.items():
+        if value is not None:
+            setattr(master, field, value)
+            changed = True
+
+    if changed:
+        master.version = (master.version or 0) + 1
+        master.update_time = datetime.utcnow()
+        db.commit()
+        db.refresh(master)
+
+    return {"code": 0, "data": {"id": master.id, "version": master.version, "updated": changed}}
+
+
+@app.delete("/api/product/master/{pid}", tags=["产品源"])
+async def delete_product(
+    pid: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """删除商品（仅admin可操作）"""
+    if user.role != "admin":
+        raise HTTPException(403, "仅管理员可删除商品")
+
+    master = db.query(ProductMaster).filter(ProductMaster.id == pid).first()
+    if not master:
+        raise HTTPException(404, "商品不存在")
+
+    # 删除关联的平台关系
+    db.query(ProductPlatformRel).filter(ProductPlatformRel.master_id == pid).delete()
+    db.delete(master)
+    db.commit()
+
+    return {"code": 0, "data": {"deleted": pid, "inner_sku": master.inner_sku}}
+
+
+# --- 批量发布 ---
+
+class BatchPublishRequest(BaseModel):
+    master_ids: List[int]
+    platforms: str = "taobao,douyin,pdd,amazon"
+
+
+@app.post("/api/product/batch_publish", tags=["产品源"])
+async def batch_publish(
+    req: BatchPublishRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """批量发布：选中多个商品，一键全平台发布"""
+    platforms = [p.strip() for p in req.platforms.split(",")]
+    results = []
+
+    for mid in req.master_ids:
+        master = db.query(ProductMaster).filter(ProductMaster.id == mid).first()
+        if not master:
+            results.append({"master_id": mid, "status": "not_found"})
+            continue
+        if master.status == 5:
+            results.append({"master_id": mid, "title": master.title, "status": "void"})
+            continue
+
+        master_data = {
+            "id": master.id, "inner_sku": master.inner_sku,
+            "title": master.title, "desc": master.desc,
+            "price": master.price, "cost_price": master.cost_price,
+            "main_images": master.main_images, "attrs_json": master.attrs_json,
+        }
+
+        pipe_result = orchestrator.run_full_pipeline(master_data, platforms, db=db)
+        summary = pipe_result["summary"]
+
+        # Update product status
+        if summary.get("stage") == "text_filter_blocked":
+            master.status = 5
+        elif summary.get("stage") == "price_check_blocked":
+            master.status = 1
+        elif summary["published"] > 0:
+            master.status = 3 if summary["published"] < summary["total"] else 4
+
+        results.append({
+            "master_id": mid,
+            "title": master.title[:40],
+            "published": summary.get("published", 0),
+            "total": summary.get("total", 0),
+            "stage": summary.get("stage", "unknown"),
+            "errors": [e.get("type", "") for e in summary.get("errors", [])],
+        })
+
+    db.commit()
+
+    return {
+        "code": 0,
+        "data": {
+            "total": len(req.master_ids),
+            "results": results,
+        },
+    }
+
+
 # ============ 调度核心模块 ============
 
 @app.post("/api/task/create", tags=["调度"])

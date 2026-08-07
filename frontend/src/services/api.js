@@ -58,6 +58,10 @@ export const getProductList = (skip = 0, limit = 20) => api.get('/product/master
 export const getProductDetail = (id) => api.get(`/product/master/${id}`);
 export const searchProducts = (q, status, skip = 0, limit = 50) =>
   api.get('/product/search', { params: { q, status, skip, limit } });
+export const updateProduct = (id, data) => api.put(`/product/master/${id}`, data);
+export const deleteProduct = (id) => api.delete(`/product/master/${id}`);
+export const batchPublish = (masterIds, platforms = 'taobao,douyin,pdd,amazon') =>
+  api.post('/product/batch_publish', { master_ids: masterIds, platforms });
 export const importCsv = (file) => {
   const formData = new FormData();
   formData.append('file', file);
