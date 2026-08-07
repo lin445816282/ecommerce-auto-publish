@@ -1,7 +1,10 @@
 import axios from 'axios';
 
+// 开发环境直连后端，生产环境 (Docker/nginx) 走反向代理 /api
+const BASE = process.env.REACT_APP_API_URL || '/api';
+
 const api = axios.create({
-  baseURL: 'http://localhost:8800/api',
+  baseURL: BASE,
   timeout: 15000,
 });
 

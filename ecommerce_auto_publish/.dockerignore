@@ -1,0 +1,14 @@
+__pycache__
+*.pyc
+*.pyo
+.git
+.gitignore
+*.md
+venv
+env
+.vscode
+.idea
+data/*.db
+*.db-journal
+processed_images
+ai_config.json

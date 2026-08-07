@@ -511,7 +511,7 @@ async def startup():
 async def root():
     return {
         "name": "全平台AI自动上架系统",
-        "version": "0.4.0",
+        "version": "0.5.0",
         "status": "running",
         "docs": "/docs",
     }
