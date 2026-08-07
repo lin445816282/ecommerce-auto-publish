@@ -51,7 +51,7 @@ export default function AITools() {
 
       <Row gutter={16}>
         <Col span={12}>
-          <Card title={<><RobotOutlined /> 智能审核</>} extra={<Button type="link" onClick={() => runAI(audit, 'audit')}>执行</Button>}>
+          <Card title={<><RobotOutlined /> 智能审核</>} extra={<Button type="link" onClick={() => runAI(aiAudit, 'audit')}>执行</Button>}>
             {results.audit ? (
               <div>
                 <Tag color={results.audit.safe ? 'green' : 'red'}>{results.audit.safe ? '✅ 安全' : '⚠️ 违规'}</Tag>
@@ -68,7 +68,7 @@ export default function AITools() {
         </Col>
 
         <Col span={12}>
-          <Card title={<><ThunderboltOutlined /> 标题生成</>} extra={<Button type="link" onClick={() => runAI(genTitle, 'titles')}>生成</Button>}>
+          <Card title={<><ThunderboltOutlined /> 标题生成</>} extra={<Button type="link" onClick={() => runAI(aiGenTitle, 'titles')}>生成</Button>}>
             {results.titles ? (
               <div>
                 {results.titles.titles?.map((t, idx) => (
@@ -83,7 +83,7 @@ export default function AITools() {
         </Col>
 
         <Col span={12} style={{ marginTop: 16 }}>
-          <Card title={<><FileTextOutlined /> 描述优化</>} extra={<Button type="link" onClick={() => runAI(optimizeDesc, 'desc_opt')}>优化</Button>}>
+          <Card title={<><FileTextOutlined /> 描述优化</>} extra={<Button type="link" onClick={() => runAI(aiOptimizeDesc, 'desc_opt')}>优化</Button>}>
             {results.desc_opt ? (
               <div>
                 <Paragraph copyable style={{ background: '#f5f5f5', padding: 12, borderRadius: 4 }}>{results.desc_opt.desc}</Paragraph>
@@ -95,7 +95,7 @@ export default function AITools() {
         </Col>
 
         <Col span={12} style={{ marginTop: 16 }}>
-          <Card title={<><SearchOutlined /> 关键词提取</>} extra={<Button type="link" onClick={() => runAI(keywords, 'keywords')}>提取</Button>}>
+          <Card title={<><SearchOutlined /> 关键词提取</>} extra={<Button type="link" onClick={() => runAI(aiKeywords, 'keywords')}>提取</Button>}>
             {results.keywords ? (
               <div>{results.keywords.keywords?.map(k => <Tag key={k} color="purple" style={{ margin: 4 }}>{k}</Tag>)}</div>
             ) : <Text type="secondary">输入商品信息后点击提取</Text>}

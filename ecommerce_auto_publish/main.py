@@ -1,25 +1,25 @@
-"""全平台AI自动上架系统 — FastAPI入口 v0.3.0"""
+"""全平台AI自动上架系统 — FastAPI入口 v0.4.0"""
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 
-from db.session import init_db, get_db, redis_client
+from db.session import init_db, get_db
 from db.models import ProductMaster, ProductPlatformRel, TaskJob, AuditRecord
 from sqlalchemy.orm import Session
 
 from modules.product_source.crawler import product_importer
 from modules.product_master.manager import product_manager as pm_mgr
 from modules.scheduler_core.task_dispatcher import dispatcher
+from modules.scheduler_core.orchestrator import orchestrator
 from modules.export_gate.publisher import publish_gate, PublishPermission
 from modules.ai_brain.engine import ai_engine
 
 app = FastAPI(
     title="全平台AI自动上架系统",
     description="支持淘宝/天猫/抖店/拼多多/亚马逊的多平台AI自动上架",
-    version="0.3.0",
+    version="0.4.0",
 )
 
 # CORS
@@ -218,6 +218,61 @@ async def dispatch_product(master_id: int, platforms: str = "taobao,douyin", db:
     return {"code": 0, "data": result}
 
 
+# ============ 全链路流水线（一键执行） ============
+
+class PipelineRequest(BaseModel):
+    master_id: int
+    platforms: str = "taobao,douyin"
+
+
+@app.post("/api/pipeline/run", tags=["流水线"])
+async def run_pipeline(req: PipelineRequest, db: Session = Depends(get_db)):
+    """一键全链路：抓取→审核→适配→草稿→发布"""
+    master = db.query(ProductMaster).filter(ProductMaster.id == req.master_id).first()
+    if not master:
+        raise HTTPException(404, "商品不存在")
+    if master.status == 5:
+        raise HTTPException(400, "商品已作废")
+
+    master_data = {
+        "id": master.id, "inner_sku": master.inner_sku,
+        "title": master.title, "desc": master.desc,
+        "price": master.price, "cost_price": master.cost_price,
+        "main_images": master.main_images, "attrs_json": master.attrs_json,
+    }
+
+    platforms = [p.strip() for p in req.platforms.split(",")]
+    result = orchestrator.run_full_pipeline(master_data, platforms)
+
+    # 更新商品状态
+    summary = result["summary"]
+    if summary.get("stage") == "text_filter_blocked":
+        master.status = 5  # 文字违规→作废
+    elif summary.get("stage") == "price_check_blocked":
+        master.status = 1  # 价格异常→待审核
+    elif summary["published"] > 0:
+        master.status = 3 if summary["published"] < summary["total"] else 4  # 部分/全部上架
+    # adapter failures leave status unchanged
+    db.commit()
+
+    return {"code": 0, "data": result}
+
+
+@app.get("/api/pipeline/tasks", tags=["流水线"])
+async def list_pipeline_tasks():
+    """流水线任务列表"""
+    return {"code": 0, "data": orchestrator.list_tasks()}
+
+
+@app.get("/api/pipeline/task/{task_id}", tags=["流水线"])
+async def get_pipeline_task(task_id: str):
+    """查看单个流水线任务"""
+    task = orchestrator.get_task(task_id)
+    if not task:
+        raise HTTPException(404, "任务不存在")
+    return {"code": 0, "data": task}
+
+
 # ============ AI决策层 ============
 
 class AIAuditRequest(BaseModel):
@@ -348,7 +403,7 @@ async def publish_status(draft_id: str):
 @app.on_event("startup")
 async def startup():
     print("=" * 50)
-    print("  全平台AI自动上架系统 v0.3.0")
+    print("  全平台AI自动上架系统 v0.4.0")
     print("  六层架构 · FastAPI后端")
     print("=" * 50)
     try:
@@ -363,7 +418,7 @@ async def startup():
 async def root():
     return {
         "name": "全平台AI自动上架系统",
-        "version": "0.3.0",
+        "version": "0.4.0",
         "status": "running",
         "docs": "/docs",
     }
