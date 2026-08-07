@@ -66,6 +66,47 @@
 
 ---
 
+## v0.7.0 JWT 认证系统 (2026-08-07)
+
+### 新增功能
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/auth/login` | POST | 用户登录，返回 access_token + refresh_token |
+| `/api/auth/register` | POST | 注册新用户（默认operator角色） |
+| `/api/auth/refresh` | POST | 刷新 access_token |
+| `/api/auth/me` | GET | 获取当前用户信息（需认证） |
+
+### 认证机制
+- **算法**: HS256 (HMAC-SHA256)
+- **Access Token**: 24小时有效
+- **Refresh Token**: 7天有效
+- **密码**: bcrypt 哈希存储
+- **默认账户**: admin / admin123
+
+### 受保护端点（需 Bearer Token）
+- `POST /api/product/crawl` — 1688商品抓取
+- `POST /api/product/manual/create` — 手动录入
+- `POST /api/pipeline/run` — 一键流水线
+- `POST /api/ai/config/key` — 设置API Key
+- `POST /api/ai/config/provider` — 切换AI提供商
+- `POST /api/ai/config/model` — 设置模型
+- `POST /api/ai/config/test` — 测试连接
+- `POST /api/image/process` — 图片处理
+- `POST /api/audit/submit` — 提交审核
+- `POST /api/publish/execute` — 发布商品
+
+### 前端
+- **登录页**: 渐变紫色背景卡片式登录界面
+- **自动刷新**: 401响应自动使用 refresh_token 续期
+- **用户菜单**: 右上角 Dropdown，显示角色+退出登录
+- **持久化**: localStorage 存储 token/user
+
+### 数据库
+- **新增表**: `users` (id, username, password_hash, full_name, role, is_active, last_login)
+- **角色**: admin / operator / viewer
+
+---
+
 ## 运行方式
 
 ### 开发模式
